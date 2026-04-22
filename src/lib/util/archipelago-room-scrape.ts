@@ -4,16 +4,19 @@ import { URL } from 'url'
 
 import { ArchipelagoScrapeRoomData, ArchipelagoScrapeRoomPlayerData, ArchipelagoRoomData } from '../../types/archipelago-types.js'
 
-const ARCHIPELAGO_ROOM_REGEX = /^(http(s)?:\/\/)?archipelago.gg\/room\/[A-Za-z0-9\-_]{22}$/
+const ARCHIPELAGO_ROOM_REGEX = /^(https?:\/\/)?archipelago\.gg\/room\/[A-Za-z0-9\-_]{22}$/
+const ARCHIPELAGO_HOSTNAME = 'archipelago.gg'
 const PORT_CAPTURE_REGEX = /archipelago\.gg:([0-9]{4,5})/
 
 export function parseArchipelagoRoomUrl (url: string): ArchipelagoRoomData | null {
   const regexResult = ARCHIPELAGO_ROOM_REGEX.exec(url)
   if (regexResult === null) return null
-  const domain = new URL(regexResult[0]).hostname
-  const tokens = url.split('/')
+  const normalizedUrl = regexResult[0].startsWith('http') ? regexResult[0] : `https://${regexResult[0]}`
+  const parsed = new URL(normalizedUrl)
+  if (parsed.hostname !== ARCHIPELAGO_HOSTNAME) return null
+  const tokens = normalizedUrl.split('/')
   const roomId = tokens[tokens.length - 1]
-  return { url: regexResult[0], domain, roomId }
+  return { url: normalizedUrl, domain: parsed.hostname, roomId }
 }
 
 async function getRoomPageDom (url: string) {

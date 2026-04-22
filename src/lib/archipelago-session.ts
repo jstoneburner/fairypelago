@@ -178,7 +178,7 @@ export class ArchipelagoSession {
     if (!sessionStatus) {
       logger.warn(
         'Failed to get session status when starting archipelago session',
-        { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, password },
+        { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password },
       )
       return SessionLoginAttemptResult.ServerDown
     }
@@ -196,7 +196,7 @@ export class ArchipelagoSession {
       logger.info('Started websocket connection to AP server', {
         sessionId: this.#sessionId,
         vessel: slotName,
-        password,
+        hasPassword: !!password,
         url,
       })
 
@@ -210,7 +210,7 @@ export class ArchipelagoSession {
       if (err instanceof LoginError) {
         return SessionLoginAttemptResult.PasswordIncorrect
       }
-      logger.warn('Failed to login to archipelago session', { error: err, sessionId: this.#sessionId, vessel: slotName, password })
+      logger.warn('Failed to login to archipelago session', { error: err, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password })
       return SessionLoginAttemptResult.ServerDown
     }
   }

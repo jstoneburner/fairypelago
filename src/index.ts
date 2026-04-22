@@ -1,6 +1,8 @@
 import 'dotenv/config'
-import { Kysely, ParseJSONResultsPlugin, SqliteDialect } from 'kysely'
+import { Kysely, Migrator, FileMigrationProvider, ParseJSONResultsPlugin, SqliteDialect } from 'kysely'
 import SQLite from 'better-sqlite3'
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 
 import { DiscordClient } from './lib/discord-client.js'
 import * as IconLookupTable from './lib/icon-lookup-table.js'
@@ -27,6 +29,25 @@ async function main () {
     }),
     plugins: [new ParseJSONResultsPlugin()],
   })
+
+  const migrator = new Migrator({
+    db,
+    provider: new FileMigrationProvider({
+      fs,
+      path,
+      migrationFolder: path.join(import.meta.dirname, 'db/migrations'),
+    }),
+  })
+
+  const { error: migrationError, results: migrationResults } = await migrator.migrateToLatest()
+  for (const result of migrationResults ?? []) {
+    if (result.status === 'Success') {
+      logger.info(`Migration applied: ${result.migrationName}`)
+    } else if (result.status === 'Error') {
+      logger.error(`Migration failed: ${result.migrationName}`)
+    }
+  }
+  if (migrationError) throw migrationError
 
   const sessionRepo = new SqliteSessionRepository(db)
   const settingsRepo = new SqliteGuildSettingRepository(db)
@@ -60,6 +81,8 @@ async function main () {
 }
 
 main().catch((err) => {
+  console.error('Fatal error during setup:', err)
   logger.error('Fatal error during setup', { error: err })
-  process.exit(1)
+  logger.on('finish', () => process.exit(1))
+  logger.end()
 })
