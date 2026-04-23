@@ -30,6 +30,41 @@ async function main () {
     plugins: [new ParseJSONResultsPlugin()],
   })
 
+  // Bootstrap migration tracking if the database was manually initialized
+  // (tables exist but Kysely's migration history doesn't). This prevents
+  // the migrator from trying to re-create tables that already exist.
+  const sqlite = (db.getExecutor() as any).adapter?.db as import('better-sqlite3').Database | undefined
+  if (sqlite) {
+    const hasMigrationTable = sqlite.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='kysely_migration'",
+    ).get()
+    const hasSessionsTable = sqlite.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'",
+    ).get()
+
+    if (!hasMigrationTable && hasSessionsTable) {
+      logger.info('Bootstrapping migration tracking for pre-existing database')
+      const migrations = await fs.readdir(path.join(import.meta.dirname, 'db/migrations'))
+      const migrationNames = migrations
+        .filter(f => f.endsWith('.ts') || f.endsWith('.js'))
+        .map(f => f.replace(/\.(ts|js)$/, ''))
+        .sort()
+
+      sqlite.exec(`
+        CREATE TABLE kysely_migration (name TEXT PRIMARY KEY NOT NULL, timestamp TEXT NOT NULL);
+        CREATE TABLE kysely_migration_lock (id TEXT PRIMARY KEY NOT NULL, is_locked INTEGER NOT NULL DEFAULT 0);
+        INSERT INTO kysely_migration_lock (id, is_locked) VALUES ('migration_lock', 0);
+      `)
+      const insertMigration = sqlite.prepare(
+        'INSERT INTO kysely_migration (name, timestamp) VALUES (?, ?)',
+      )
+      for (const name of migrationNames) {
+        insertMigration.run(name, new Date().toISOString())
+        logger.info(`Marked migration as already applied: ${name}`)
+      }
+    }
+  }
+
   const migrator = new Migrator({
     db,
     provider: new FileMigrationProvider({

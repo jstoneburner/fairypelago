@@ -1,6 +1,7 @@
 import { GameIcons, ItemTierIcons, ItemIcons } from '../types/icon-types.js'
 
 import { actIcons } from './matchers/act.js'
+import { factorioIcons } from './matchers/factorio.js'
 import { adokuIcons } from './matchers/adoku.js'
 import { ahitItemIcons } from './matchers/ahit.js'
 import { alttpIcons } from './matchers/alttp.js'
@@ -50,6 +51,8 @@ export const gameIcons: GameIcons = {
   'Another Crabs Treasure': 'act',
   'APBingo': ':8ball:',
   'Archipeladoku': ':1234:',
+  'Factorio': 'factorio',
+  'Factorio - Space Age Without Space': 'factorio',
   'Celeste 64': 'celeste64',
   'Celeste (Open World)': 'celeste',
   'Hollow Knight': 'hk',
@@ -96,6 +99,8 @@ export const itemIcons: ItemIcons = {
   'Another Crabs Treasure': actIcons,
   'APBingo': bingoIcons,
   'Archipeladoku': adokuIcons,
+  'Factorio': factorioIcons,
+  'Factorio - Space Age Without Space': factorioIcons,
   'Celeste 64': celeste64Icons,
   'Celeste (Open World)': celesteIcons,
   'Hollow Knight': hkIcons,
