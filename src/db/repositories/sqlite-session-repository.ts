@@ -76,6 +76,14 @@ export class SqliteSessionRepository implements ISessionRepository {
     return result ? this.#mapToDBSession(result) : null
   }
 
+  async updateChannelId (sessionId: number, channelId: string): Promise<void> {
+    await this.db
+      .updateTable('sessions')
+      .set({ channelId })
+      .where('id', '=', sessionId)
+      .execute()
+  }
+
   async getSessions (options: GetSessionsOptions = {}): Promise<DBSession[]> {
     let query = await this.db
       .selectFrom('sessions')

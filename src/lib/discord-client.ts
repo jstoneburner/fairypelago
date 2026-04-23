@@ -114,6 +114,7 @@ export class DiscordClient {
           const strippedContent = message.content.slice(prefix.length).trim()
           await tryToExecuteSessionCommand(message, strippedContent, existingSession, {
             notificationRequestsRepo: this.notificationRequestsRepo,
+            sessionRegistry: this.sessionRegistry,
           })
           return
         }
@@ -214,7 +215,7 @@ export class DiscordClient {
         const newSession = await this.sessionRegistry.createSession(newThread, archRoomData)
         if (!newSession) {
           await replyWithError(message, 'Failed to fetch info from this AP room, perhaps the room is expired or the site is down...')
-          logger.info('AP roomm link detected but failed to create session, ', {
+          logger.info('AP room link detected but failed to create session, ', {
             channelId: message.channelId,
             guildId: message.guildId,
             threadId: newThread.id,

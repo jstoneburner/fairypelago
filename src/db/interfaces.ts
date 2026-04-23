@@ -22,6 +22,7 @@ export interface ISessionRepository {
   setSessionExpired(sessionId: number): Promise<void>;
   findSession(channelId: string): Promise<DBSession | null>;
   findSessionById(sessionId: number): Promise<DBSession | null>;
+  updateChannelId(sessionId: number, channelId: string): Promise<void>;
 }
 
 export interface DBGuildSettings {

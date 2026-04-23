@@ -38,6 +38,10 @@ export class EventToDiscordHandler implements IEventHandler {
     this.#notificationRequestsRepo = deps.notificationRequestsRepo
   }
 
+  changeDiscordChannel (channel: DC.TextChannel | DC.ThreadChannel): void {
+    this.#discordChannel = new CoalescingChannelWrapper(channel, 1500)
+  }
+
   async sessionIdle (session: ArchipelagoSession) {
     await this.#discordChannel.send('I\'m ready to go. Give me the \'connect\' command to connect to the session to begin logging.')
   }

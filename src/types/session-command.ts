@@ -1,10 +1,12 @@
 import { Message, OmitPartialGroupDMChannel } from 'discord.js'
 
 import { ArchipelagoSession } from '../lib/archipelago-session.js'
+import { ArchipelagoSessionRegistry } from '../lib/archipelago-session-registry.js'
 import { INotificationRequestsRepository } from '../db/interfaces.js'
 
 export interface SessionCommandDeps {
   notificationRequestsRepo: INotificationRequestsRepository,
+  sessionRegistry: ArchipelagoSessionRegistry,
 }
 
 export interface SessionCommand {

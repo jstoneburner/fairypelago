@@ -94,6 +94,7 @@ export class ArchipelagoSession {
   #optionsProvider: IOptionsProvider
   #staticState: SessionStaticState
   #isFinished = false
+  #isDisposed = false
 
   // Calls to current status endpoint are cached due to long overhead
   // Inflight prevents duplicate calls while waiting on the network for the first call
@@ -104,6 +105,10 @@ export class ArchipelagoSession {
     isInTransition: false,
     prevVesselName: null,
   }
+
+  // Saved credentials for automatic reconnection after unexpected disconnects
+  #lastVesselName: string | null = null
+  #lastPassword: string | undefined = undefined
 
   // Tracks recent goals by slotId to prevent item release spam
   #goalCache = new Set<number>()
@@ -200,6 +205,10 @@ export class ArchipelagoSession {
         url,
       })
 
+      // Save credentials so the reconnect logic can restore the connection
+      this.#lastVesselName = slotName
+      this.#lastPassword = password
+
       // Populate data package cache with current game packages
       // for item name lookup in the status to work
       await this.getDataPackage()
@@ -267,8 +276,33 @@ export class ArchipelagoSession {
   }
 
   async dispose () {
+    this.#isDisposed = true
     if (this.isSocketConnected) {
       await this.#eventHandler.botShutdown(this)
+    }
+  }
+
+  changeDiscordChannel (channel: import('discord.js').TextChannel | import('discord.js').ThreadChannel) {
+    this.#eventHandler.changeDiscordChannel(channel)
+  }
+
+  async #scheduleReconnect (attempt: number): Promise<void> {
+    const MAX_ATTEMPTS = 8
+    if (this.#isDisposed || this.#isFinished || !this.#lastVesselName) return
+    if (attempt > MAX_ATTEMPTS) {
+      logger.warn('AP reconnect max attempts reached, giving up', { sessionId: this.#sessionId })
+      return
+    }
+    const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5 * 60 * 1000)
+    logger.info('Scheduling AP reconnect', { sessionId: this.#sessionId, attempt, delayMs })
+    await new Promise<void>(resolve => setTimeout(resolve, delayMs))
+    if (this.#isDisposed || this.#isFinished) return
+
+    logger.info('Attempting AP reconnect', { sessionId: this.#sessionId, attempt, vessel: this.#lastVesselName })
+    const result = await this.#attemptLoginAsPlayer(this.#lastVesselName, this.#lastPassword)
+    if (result !== SessionLoginAttemptResult.Success) {
+      logger.warn('AP reconnect attempt failed', { sessionId: this.#sessionId, attempt, result })
+      await this.#scheduleReconnect(attempt + 1)
     }
   }
 
@@ -406,6 +440,9 @@ export class ArchipelagoSession {
       } else {
         await this.#emitEventIfEveryoneGoaled()
         await this.#eventHandler.socketDisconnected(this, this.#isFinished)
+        if (!this.#isFinished && !this.#isDisposed && this.#lastVesselName) {
+          void this.#scheduleReconnect(1)
+        }
       }
     })
 

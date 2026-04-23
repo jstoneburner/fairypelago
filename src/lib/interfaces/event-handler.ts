@@ -1,9 +1,11 @@
 import { Item, Player } from 'archipelago.js'
+import * as DC from 'discord.js'
 
 import { ArchipelagoSession } from '../archipelago-session.js'
 import { SessionLoginAttemptResult } from '../../types/session-types.js'
 
 export interface IEventHandler {
+  changeDiscordChannel: (channel: DC.TextChannel | DC.ThreadChannel) => void;
   sessionIdle: (session: ArchipelagoSession) => Promise<void>;
   sessionFailedAutojoin: (session: ArchipelagoSession, attemptResult: SessionLoginAttemptResult) => Promise<void>;
   socketDisconnected: (session: ArchipelagoSession, isFinished: boolean) => Promise<void>;

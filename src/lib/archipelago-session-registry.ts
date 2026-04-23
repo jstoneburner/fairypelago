@@ -108,6 +108,27 @@ export class ArchipelagoSessionRegistry {
     })
   }
 
+  async moveSessionToChannel (sessionId: number, newChannel: DC.TextChannel | DC.ThreadChannel): Promise<boolean> {
+    const session = this.#sessions.get(sessionId)
+    const oldChannelId = this.#idToChannel.get(sessionId)
+    if (!session || !oldChannelId) {
+      logger.warn('Failed to find session when moving to new channel', { sessionId })
+      return false
+    }
+    try {
+      await this.sessionRepo.updateChannelId(sessionId, newChannel.id)
+    } catch (err) {
+      logger.warn('Failed to update channel ID in database', { sessionId, newChannelId: newChannel.id, error: err })
+      return false
+    }
+    this.#channelToId.delete(oldChannelId)
+    this.#channelToId.set(newChannel.id, sessionId)
+    this.#idToChannel.set(sessionId, newChannel.id)
+    session.changeDiscordChannel(newChannel)
+    logger.info('Moved session to new channel', { sessionId, oldChannelId, newChannelId: newChannel.id })
+    return true
+  }
+
   async removeSession (sessionId: number) {
     const channelIdToRemove = this.#idToChannel.get(sessionId)
     const session = await this.#sessions.get(sessionId)
