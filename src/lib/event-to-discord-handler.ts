@@ -58,7 +58,10 @@ export class EventToDiscordHandler implements IEventHandler {
     }
   }
 
-  async socketDisconnected (session: ArchipelagoSession, isFinished: boolean) {
+  async socketDisconnected (session: ArchipelagoSession, isFinished: boolean, willReconnect: boolean) {
+    // Suppress the message when an automatic reconnect is already scheduled —
+    // the bot will silently restore the connection without spamming the channel.
+    if (willReconnect) return
     if (isFinished) {
       await this.#discordChannel.send('I\'ve disconnected as the session appears to be finished.')
     } else {
@@ -66,9 +69,18 @@ export class EventToDiscordHandler implements IEventHandler {
     }
   }
 
-  async socketConnected (session: ArchipelagoSession) {
+  async socketConnected (session: ArchipelagoSession, isAutoReconnect: boolean) {
+    // Suppress on silent background reconnects — use `>status` to check connection state.
+    if (isAutoReconnect) return
     const currentVessel = session.getCurrentVessel()
     await this.#discordChannel.send(`I've connected to the session through __${currentVessel}__.`)
+  }
+
+  async reconnectFailed (session: ArchipelagoSession) {
+    await this.#discordChannel.send(
+      'I lost connection and couldn\'t automatically reconnect. ' +
+      'Give me the `connect` command to try manually.',
+    )
   }
 
   async botShutdown (session: ArchipelagoSession) {

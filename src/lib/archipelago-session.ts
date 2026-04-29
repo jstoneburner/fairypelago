@@ -178,7 +178,7 @@ export class ArchipelagoSession {
     return SessionLoginAttemptResult.PasswordIncorrect
   }
 
-  async #attemptLoginAsPlayer (slotName: string, password?: string): Promise<SessionLoginAttemptResult> {
+  async #attemptLoginAsPlayer (slotName: string, password?: string, isAutoReconnect = false): Promise<SessionLoginAttemptResult> {
     const sessionStatus = await this.getCurrentStatus()
     if (!sessionStatus) {
       logger.warn(
@@ -213,7 +213,7 @@ export class ArchipelagoSession {
       // for item name lookup in the status to work
       await this.getDataPackage()
 
-      await this.#eventHandler.socketConnected(this)
+      await this.#eventHandler.socketConnected(this, isAutoReconnect)
       return SessionLoginAttemptResult.Success
     } catch (err) {
       if (err instanceof LoginError) {
@@ -291,6 +291,7 @@ export class ArchipelagoSession {
     if (this.#isDisposed || this.#isFinished || !this.#lastVesselName) return
     if (attempt > MAX_ATTEMPTS) {
       logger.warn('AP reconnect max attempts reached, giving up', { sessionId: this.#sessionId })
+      await this.#eventHandler.reconnectFailed(this)
       return
     }
     const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5 * 60 * 1000)
@@ -299,7 +300,7 @@ export class ArchipelagoSession {
     if (this.#isDisposed || this.#isFinished) return
 
     logger.info('Attempting AP reconnect', { sessionId: this.#sessionId, attempt, vessel: this.#lastVesselName })
-    const result = await this.#attemptLoginAsPlayer(this.#lastVesselName, this.#lastPassword)
+    const result = await this.#attemptLoginAsPlayer(this.#lastVesselName, this.#lastPassword, true)
     if (result !== SessionLoginAttemptResult.Success) {
       logger.warn('AP reconnect attempt failed', { sessionId: this.#sessionId, attempt, result })
       await this.#scheduleReconnect(attempt + 1)
@@ -439,8 +440,9 @@ export class ArchipelagoSession {
         this.#prevVesselChange.isInTransition = false
       } else {
         await this.#emitEventIfEveryoneGoaled()
-        await this.#eventHandler.socketDisconnected(this, this.#isFinished)
-        if (!this.#isFinished && !this.#isDisposed && this.#lastVesselName) {
+        const willReconnect = !this.#isFinished && !this.#isDisposed && !!this.#lastVesselName
+        await this.#eventHandler.socketDisconnected(this, this.#isFinished, willReconnect)
+        if (willReconnect) {
           void this.#scheduleReconnect(1)
         }
       }

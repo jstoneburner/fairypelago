@@ -8,8 +8,12 @@ export interface IEventHandler {
   changeDiscordChannel: (channel: DC.TextChannel | DC.ThreadChannel) => void;
   sessionIdle: (session: ArchipelagoSession) => Promise<void>;
   sessionFailedAutojoin: (session: ArchipelagoSession, attemptResult: SessionLoginAttemptResult) => Promise<void>;
-  socketDisconnected: (session: ArchipelagoSession, isFinished: boolean) => Promise<void>;
-  socketConnected: (session: ArchipelagoSession) => Promise<void>;
+  /** willReconnect=true means an automatic retry is already scheduled; suppress the message. */
+  socketDisconnected: (session: ArchipelagoSession, isFinished: boolean, willReconnect: boolean) => Promise<void>;
+  /** isAutoReconnect=true means this was a silent background reconnect; suppress the message. */
+  socketConnected: (session: ArchipelagoSession, isAutoReconnect: boolean) => Promise<void>;
+  /** Called when the session exhausts all automatic reconnect attempts. */
+  reconnectFailed: (session: ArchipelagoSession) => Promise<void>;
   botShutdown: (session: ArchipelagoSession) => Promise<void>;
   adminCommand: (session: ArchipelagoSession, text: string) => Promise<void>;
   chat: (session: ArchipelagoSession, message: string, player: Player) => Promise<void>;
