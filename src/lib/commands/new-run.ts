@@ -11,7 +11,7 @@ const newRun: Command = {
   aliases: ['newrun', 'startrun'],
   categories: ['Admin'],
   description: 'Creates broadcast and chat channels for a new AP run.',
-  usageHelpText: 'newrun `archipelago-room-url`',
+  usageHelpText: 'newrun `archipelago-room-url` [--force]',
   async execute (message, tokens, _commands, { sessionRegistry, sessionRepo, guildSettingsRepo }) {
     if (!message.member?.permissions.has(DC.PermissionFlagsBits.Administrator) &&
       message.author.id !== process.env.OWNER_ID) {
@@ -24,7 +24,8 @@ const newRun: Command = {
       return
     }
 
-    const roomUrl = tokens[0]
+    const force = tokens.includes('--force')
+    const roomUrl = tokens.find(t => !t.startsWith('--'))
     if (!roomUrl) {
       await message.reply(`Usage: \`${message.content.split(' ')[0]} ${newRun.usageHelpText}\``)
       return
@@ -36,11 +37,11 @@ const newRun: Command = {
       return
     }
 
-    // If a session already exists for this room, just link to it
+    // If a session already exists for this room, link to it unless --force is set
     const existingChannelId = sessionRegistry.getChannelIdByRoomUrl(archRoomData.url)
-    if (existingChannelId) {
+    if (existingChannelId && !force) {
       const existingChannel = await message.guild.channels.fetch(existingChannelId).catch(() => null)
-      await message.reply(`A session already exists for that room: ${existingChannel?.url ?? existingChannelId}`)
+      await message.reply(`A session already exists for that room: ${existingChannel?.url ?? existingChannelId}\nUse \`--force\` to create new channels anyway.`)
       return
     }
 
