@@ -193,19 +193,23 @@ export class DiscordClient {
         // Determine the category to place new channels in (same as log channel, if any)
         const parentCategoryId = (logChannel as DC.TextChannel).parentId ?? null
 
-        // Build a date-stamped name; append a counter if that name already exists
-        const dateStr = new Date().toISOString().slice(0, 10)
+        // Build a date-stamped name (MM-DD-YYYY); append a counter if that name already exists
+        const now = new Date()
+        const mm = String(now.getMonth() + 1).padStart(2, '0')
+        const dd = String(now.getDate()).padStart(2, '0')
+        const yyyy = now.getFullYear()
+        const dateStr = `${mm}-${dd}-${yyyy}`
         const takenNames = new Set(
           message.guild.channels.cache
             .filter(c => c.parentId === parentCategoryId)
             .map(c => c.name),
         )
-        let broadcastName = `ap-${dateStr}`
-        let chatName = `ap-chat-${dateStr}`
+        let broadcastName = `run-${dateStr}`
+        let chatName = `run-chat-${dateStr}`
         let suffix = 2
         while (takenNames.has(broadcastName) || takenNames.has(chatName)) {
-          broadcastName = `ap-${dateStr}-${suffix}`
-          chatName = `ap-chat-${dateStr}-${suffix}`
+          broadcastName = `run-${dateStr}-${suffix}`
+          chatName = `run-chat-${dateStr}-${suffix}`
           suffix++
         }
 
@@ -261,6 +265,13 @@ export class DiscordClient {
         // Pin the player list to the broadcast channel
         const initialMessage = await broadcastChannel.send(createRoomDataDisplay(newSession.staticState))
         await initialMessage.pin()
+
+        // Pin the AP room link in the chat channel so players can always find it.
+        // Safe: the chat channel is already registered in the registry at this point,
+        // so the session-creation handler will short-circuit on its channel check.
+        // Bot messages are also filtered by author check at the top of the handler.
+        const chatRoomLinkMessage = await chatChannel.send(archRoomData.url)
+        await chatRoomLinkMessage.pin()
 
         // Announce both channels in the log channel (and in the originating channel if different)
         const announcement = `New AP run started!\nBroadcast: ${broadcastChannel.url}\nChat: ${chatChannel.url}`
