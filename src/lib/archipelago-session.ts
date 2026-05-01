@@ -214,7 +214,11 @@ export class ArchipelagoSession {
         url,
         slotName,
         undefined, // game — not needed for TextOnly/Tracker clients
-        { tags: ['Discord', 'Tracker', 'TextOnly'], password },
+        {
+          tags: ['Discord', 'Tracker', 'TextOnly'],
+          password,
+          items: 0, // Minimal items handling — this bot is an observer, not a player
+        },
       )
       logger.info('Started websocket connection to AP server', {
         sessionId: this.#sessionId,
