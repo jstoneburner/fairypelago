@@ -52,9 +52,9 @@ const sessions: Command = {
     }
 
     const lines = guildSessions.map(s => {
-      const isActive = sessionRegistry.getSessionByChannelId(s.channelId) !== undefined
-      const status = s.expiredAt ? '🔴 expired' : isActive ? '🟢 active' : '🟡 registered'
-      const created = s.createdAt.toLocaleDateString('en-US')
+      const isActive = sessionRegistry.getSessionByChannelId(s.channelId) !== null
+      const status = s.expiredAt != null ? '🔴 expired' : isActive ? '🟢 active' : '🟡 registered'
+      const created = new Date(s.createdAt).toLocaleDateString('en-US')
       const chatPart = s.chatChannelId ? ` | chat: <#${s.chatChannelId}>` : ''
       return `**#${s.id}** ${status} — <#${s.channelId}>${chatPart} | room: \`${s.roomData.roomId}\` | created ${created}`
     })
