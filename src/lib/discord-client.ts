@@ -1,7 +1,7 @@
 import * as DC from 'discord.js'
 
 import { parseArchipelagoRoomUrl } from './util/archipelago-room-scrape.js'
-import { createRunChannels } from './util/create-run-channels.js'
+import { createRunChannels, resolveSessionCategory } from './util/create-run-channels.js'
 import { reloadAvaliableCommands, getAvaliableCommands } from './commands.js'
 import { catchAndLogError } from './util/general.js'
 import { logger } from './util/logger.js'
@@ -190,11 +190,17 @@ export class DiscordClient {
           return
         }
 
+        const category = resolveSessionCategory(message.guild, guildSettings.sessionCategoryName)
+        if (!category) {
+          await replyWithError(message, `Session category "${guildSettings.sessionCategoryName}" not found. Create it in Discord or change it with \`.setcategory\`.`)
+          return
+        }
+
         const result = await createRunChannels(
           message.guild,
           this.#client.user!.id,
           archRoomData,
-          logChannel as DC.TextChannel,
+          category.id,
           this.sessionRegistry,
           this.sessionRepo,
         )

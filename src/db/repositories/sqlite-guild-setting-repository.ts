@@ -28,6 +28,7 @@ export class SqliteGuildSettingRepository implements IGuildSettingsRepository {
       logChannelId: null,
       commandPrefix: '.',
       sessionCommandPrefix: '>',
+      sessionCategoryName: 'Sessions',
       sessionOptions: {
         enablePlayerIcons: true,
         enableGameIcons: true,
@@ -92,6 +93,14 @@ export class SqliteGuildSettingRepository implements IGuildSettingsRepository {
     await this.db
       .updateTable('guild_settings')
       .set({ sessionOptions: JSON.stringify(sessionOptions) })
+      .where('guildId', '=', guildId)
+      .execute()
+  }
+
+  async setSessionCategoryName (guildId: string, name: string): Promise<void> {
+    await this.db
+      .updateTable('guild_settings')
+      .set({ sessionCategoryName: name })
       .where('guildId', '=', guildId)
       .execute()
   }

@@ -8,6 +8,7 @@ export interface GuildSettingsTable {
   logChannelId: string | null;
   commandPrefix: string;
   sessionCommandPrefix: string;
+  sessionCategoryName: string;
   sessionOptions: JSONColumnType<SessionOptions>;
   playerEmojis: JSONColumnType<Record<string, string>>;
 }

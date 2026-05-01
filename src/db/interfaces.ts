@@ -32,6 +32,7 @@ export interface DBGuildSettings {
   logChannelId: string | null;
   commandPrefix: string;
   sessionCommandPrefix: string;
+  sessionCategoryName: string;
   sessionOptions: SessionOptions;
   playerEmojis: Record<string, string>;
 }
@@ -43,6 +44,7 @@ export interface IGuildSettingsRepository {
   setLogChannel(guildId: string, channelId: string): Promise<void>;
   setSessionOptions(guildId: string, sessionOptions: SessionOptions): Promise<void>;
   setPlayerEmojis(guildId: string, playerEmojis: Record<string, string>): Promise<void>;
+  setSessionCategoryName(guildId: string, name: string): Promise<void>;
 }
 
 export interface DBNotificationRequest {

@@ -13,6 +13,16 @@ export interface CreateRunChannelsResult {
 }
 
 /**
+ * Looks up a category channel by name (case-insensitive) in the guild.
+ * Returns null if not found.
+ */
+export function resolveSessionCategory (guild: DC.Guild, categoryName: string): DC.CategoryChannel | null {
+  return (guild.channels.cache.find(
+    c => c.type === DC.ChannelType.GuildCategory && c.name.toLowerCase() === categoryName.toLowerCase(),
+  ) as DC.CategoryChannel | undefined) ?? null
+}
+
+/**
  * Creates a broadcast + chat channel pair for an AP run, sets up permissions,
  * registers the session, and pins the room link + player list.
  *
@@ -23,11 +33,10 @@ export async function createRunChannels (
   guild: DC.Guild,
   botUserId: string,
   archRoomData: ArchipelagoRoomData,
-  logChannel: DC.TextChannel,
+  parentCategoryId: string | null,
   sessionRegistry: ArchipelagoSessionRegistry,
   sessionRepo: ISessionRepository,
 ): Promise<CreateRunChannelsResult | null> {
-  const parentCategoryId = logChannel.parentId ?? null
 
   // Build a date-stamped name (MM-DD-YYYY); append a counter if taken
   const now = new Date()

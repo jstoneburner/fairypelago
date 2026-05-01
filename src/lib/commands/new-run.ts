@@ -2,7 +2,7 @@ import * as DC from 'discord.js'
 
 import { Command } from '../../types/command.js'
 import { parseArchipelagoRoomUrl } from '../util/archipelago-room-scrape.js'
-import { createRunChannels } from '../util/create-run-channels.js'
+import { createRunChannels, resolveSessionCategory } from '../util/create-run-channels.js'
 import { ArchipelagoWebhostClient } from '../archipelago-webhost-client.js'
 import { replyWithError } from '../util/message-utils.js'
 
@@ -65,12 +65,18 @@ const newRun: Command = {
       return
     }
 
+    const category = resolveSessionCategory(message.guild, guildSettings.sessionCategoryName)
+    if (!category) {
+      await replyWithError(message, `Session category "${guildSettings.sessionCategoryName}" not found. Create it in Discord or change it with \`.setcategory\`.`)
+      return
+    }
+
     const loadingReaction = await message.react('⏳')
     const result = await createRunChannels(
       message.guild,
       message.client.user!.id,
       archRoomData,
-      logChannel,
+      category.id,
       sessionRegistry,
       sessionRepo,
     )
