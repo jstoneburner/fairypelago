@@ -22,7 +22,7 @@
     "typescript-eslint": "^8.38.0"
   },
   "dependencies": {
-    "archipelago.js": "^2.0.4",
+    "archipelago.js": "^2.1.0",
     "axios": "^1.11.0",
     "better-sqlite3": "^12.6.2",
     "discord.js": "^14.21.0",
