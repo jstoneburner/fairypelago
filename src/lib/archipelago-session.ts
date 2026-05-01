@@ -213,8 +213,8 @@ export class ArchipelagoSession {
       await this.#client.login(
         url,
         slotName,
-        password,
-        { tags: ['Discord', 'Tracker', 'TextOnly'] },
+        undefined, // game — not needed for TextOnly/Tracker clients
+        { tags: ['Discord', 'Tracker', 'TextOnly'], password },
       )
       logger.info('Started websocket connection to AP server', {
         sessionId: this.#sessionId,
