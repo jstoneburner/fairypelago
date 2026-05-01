@@ -6,9 +6,10 @@ ENV NODE_ENV production
 
 WORKDIR /usr/src/app
 
-RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    --mount=type=cache,target=/root/.npm \
+# Copy manifests first so Docker invalidates the npm install layer only when
+# dependencies change, not on every source file change.
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev
 
 RUN mkdir -p logs storage && chown node:node logs storage
