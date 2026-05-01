@@ -137,7 +137,11 @@ export class ArchipelagoSession {
     roomData: ArchipelagoRoomData,
     deps: SessionDeps,
   ) {
-    const client = new ArchipelagoClient()
+    // Disable autoFetchDataPackage: in AP 0.6.x the server requires Connect
+    // to arrive before any GetDataPackage requests; fetching first causes the
+    // server to send InvalidPacket when Connect finally arrives. We fetch
+    // manually after successful login instead.
+    const client = new ArchipelagoClient({ autoFetchDataPackage: false })
     const webhostClient = new ArchipelagoWebhostClient(roomData.domain)
     const initialSessionData = await webhostClient.fetchInitialSessionData(roomData.roomId)
     if (!initialSessionData) return null
@@ -263,7 +267,7 @@ export class ArchipelagoSession {
       )
       return false
     }
-    const newClient = new ArchipelagoClient()
+    const newClient = new ArchipelagoClient({ autoFetchDataPackage: false })
     try {
       await newClient.login(
         `${this.#roomData.domain}:${sessionStatus.port}`,
