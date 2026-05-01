@@ -5,6 +5,7 @@ export interface DBSession {
   id: number;
   guildId: string;
   channelId: string;
+  chatChannelId: string | null;
   roomData: ArchipelagoRoomData;
   createdAt: Date;
   expiredAt: Date | null;
@@ -23,6 +24,7 @@ export interface ISessionRepository {
   findSession(channelId: string): Promise<DBSession | null>;
   findSessionById(sessionId: number): Promise<DBSession | null>;
   updateChannelId(sessionId: number, channelId: string): Promise<void>;
+  setChatChannelId(sessionId: number, chatChannelId: string): Promise<void>;
 }
 
 export interface DBGuildSettings {

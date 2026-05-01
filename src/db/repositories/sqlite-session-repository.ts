@@ -12,6 +12,7 @@ export class SqliteSessionRepository implements ISessionRepository {
       id: row.id,
       guildId: row.guildId,
       channelId: row.channelId,
+      chatChannelId: row.chatChannelId ?? null,
       roomData: row.roomData,
       createdAt: row.createdAt,
       expiredAt: row.expiredAt,
@@ -74,6 +75,14 @@ export class SqliteSessionRepository implements ISessionRepository {
       .executeTakeFirst()
 
     return result ? this.#mapToDBSession(result) : null
+  }
+
+  async setChatChannelId (sessionId: number, chatChannelId: string): Promise<void> {
+    await this.db
+      .updateTable('sessions')
+      .set({ chatChannelId })
+      .where('id', '=', sessionId)
+      .execute()
   }
 
   async updateChannelId (sessionId: number, channelId: string): Promise<void> {

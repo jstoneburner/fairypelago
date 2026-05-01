@@ -138,7 +138,8 @@ export class DiscordClient {
         if (!this.#client.user) return
         if (message.author.id === this.#client.user.id) return
         if (message.author.bot) return
-        if (message.channel.isThread()) return
+        // Skip if message is already in a session channel (broadcast or chat)
+        if (this.sessionRegistry.getSessionByChannelId(message.channelId)) return
         if (!message.guildId) return
 
         // Checks if message contains archipelago room link
@@ -189,52 +190,83 @@ export class DiscordClient {
           return
         }
 
-        const threadBaseMessage = await (async () => {
-          if (message.channelId !== logChannelId) {
-            return await message.forward(logChannelId)
-          }
-          return message
-        })()
-        const currentDay = new Date().toLocaleDateString()
-        const newThreadName = `${sessionStatus.port} with ${Object.keys(sessionStatus.playerStatus).length} worlds on ${currentDay}`
-        const newThread = await threadBaseMessage.startThread({
-          name: newThreadName,
-          autoArchiveDuration: DC.ThreadAutoArchiveDuration.OneWeek,
-        })
-        if (newThread.joinable) {
-          await newThread.join()
+        // Determine the category to place new channels in (same as log channel, if any)
+        const parentCategoryId = (logChannel as DC.TextChannel).parentId ?? null
+
+        // Build a date-stamped name; append a counter if that name already exists
+        const dateStr = new Date().toISOString().slice(0, 10)
+        const takenNames = new Set(
+          message.guild.channels.cache
+            .filter(c => c.parentId === parentCategoryId)
+            .map(c => c.name),
+        )
+        let broadcastName = `ap-${dateStr}`
+        let chatName = `ap-chat-${dateStr}`
+        let suffix = 2
+        while (takenNames.has(broadcastName) || takenNames.has(chatName)) {
+          broadcastName = `ap-${dateStr}-${suffix}`
+          chatName = `ap-chat-${dateStr}-${suffix}`
+          suffix++
         }
 
-        logger.info('New thread created for session', {
-          channelId: message.channelId,
+        // Broadcast channel — bot can post, everyone else can only read
+        const broadcastChannel = await message.guild.channels.create({
+          name: broadcastName,
+          type: DC.ChannelType.GuildText,
+          parent: parentCategoryId,
+          permissionOverwrites: [
+            {
+              id: message.guild.roles.everyone.id,
+              allow: [DC.PermissionFlagsBits.ViewChannel, DC.PermissionFlagsBits.ReadMessageHistory],
+              deny: [DC.PermissionFlagsBits.SendMessages, DC.PermissionFlagsBits.CreatePublicThreads, DC.PermissionFlagsBits.CreatePrivateThreads],
+            },
+            {
+              id: this.#client.user!.id,
+              allow: [DC.PermissionFlagsBits.ViewChannel, DC.PermissionFlagsBits.SendMessages, DC.PermissionFlagsBits.ManageMessages, DC.PermissionFlagsBits.EmbedLinks, DC.PermissionFlagsBits.AttachFiles],
+            },
+          ],
+        })
+
+        // Chat channel — open for everyone
+        const chatChannel = await message.guild.channels.create({
+          name: chatName,
+          type: DC.ChannelType.GuildText,
+          parent: parentCategoryId,
+        })
+
+        logger.info('New channels created for session', {
           guildId: message.guildId,
-          threadId: newThread.id,
+          broadcastChannelId: broadcastChannel.id,
+          chatChannelId: chatChannel.id,
           url: archRoomData.url,
         })
 
-        const newSession = await this.sessionRegistry.createSession(newThread, archRoomData)
+        const newSession = await this.sessionRegistry.createSession(broadcastChannel, archRoomData)
         if (!newSession) {
           await replyWithError(message, 'Failed to fetch info from this AP room, perhaps the room is expired or the site is down...')
+          await broadcastChannel.delete().catch(() => undefined)
+          await chatChannel.delete().catch(() => undefined)
           logger.info('AP room link detected but failed to create session, ', {
             channelId: message.channelId,
             guildId: message.guildId,
-            threadId: newThread.id,
             url: archRoomData.url,
           })
           return
         }
 
-        const initialMessage = await newThread.send(createRoomDataDisplay(newSession.staticState))
+        // Register the chat channel so session commands and AP forwarding work there
+        await this.sessionRepo.setChatChannelId(newSession.sessionId, chatChannel.id)
+        this.sessionRegistry.linkChatChannel(newSession.sessionId, chatChannel.id)
+
+        // Pin the player list to the broadcast channel
+        const initialMessage = await broadcastChannel.send(createRoomDataDisplay(newSession.staticState))
         await initialMessage.pin()
 
+        // Announce both channels in the log channel (and in the originating channel if different)
+        const announcement = `New AP run started!\nBroadcast: ${broadcastChannel.url}\nChat: ${chatChannel.url}`
+        await (logChannel as DC.TextChannel).send(announcement)
         if (message.channelId !== logChannelId) {
-          await message.reply(newThread.url)
-          logger.info('URL posted outside log channel, forwarded link', {
-            channelId: message.channelId,
-            guildId: message.guildId,
-            threadId: newThread.id,
-            url: archRoomData.url,
-          })
+          await message.reply(announcement)
         }
 
         await newSession.start()

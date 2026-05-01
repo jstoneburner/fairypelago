@@ -16,6 +16,7 @@ export interface SessionsTable {
   id: Generated<number>;
   guildId: string;
   channelId: string;
+  chatChannelId: string | null;
   roomData: JSONColumnType<ArchipelagoRoomData>;
   createdAt: ColumnType<Date, string | undefined, never>;
   expiredAt: ColumnType<Date | null, string | null, string | null>;

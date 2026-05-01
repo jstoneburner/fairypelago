@@ -12,6 +12,8 @@ export class ArchipelagoSessionRegistry {
   #sessions = new Map<number, ArchipelagoSession>()
   #channelToId = new Map<DC.Snowflake, number>()
   #idToChannel = new Map<number, DC.Snowflake>()
+  // Secondary map: chat channels also route to a session (for commands + AP forwarding)
+  #chatChannelToId = new Map<DC.Snowflake, number>()
 
   constructor (
     private sessionRepo: ISessionRepository,
@@ -47,9 +49,12 @@ export class ArchipelagoSessionRegistry {
         this.#sessions.set(session.id, newSession)
         this.#channelToId.set(channel.id, session.id)
         this.#idToChannel.set(session.id, channel.id)
+        if (session.chatChannelId) {
+          this.#chatChannelToId.set(session.chatChannelId, session.id)
+        }
         logger.info(
           'Initialized existing session from db in registry',
-          { sessionId: session.id, roomData: session.roomData, channelId: channel.id },
+          { sessionId: session.id, roomData: session.roomData, channelId: channel.id, chatChannelId: session.chatChannelId },
         )
       } catch (err) {
         logger.error('Failed to initialize session into registry from db', { error: err })
@@ -58,7 +63,7 @@ export class ArchipelagoSessionRegistry {
   }
 
   getSessionByChannelId (channelId: DC.Snowflake): ArchipelagoSession | null {
-    const id = this.#channelToId.get(channelId)
+    const id = this.#channelToId.get(channelId) ?? this.#chatChannelToId.get(channelId)
     if (!id) return null
     return this.#sessions.get(id) ?? null
   }
@@ -108,6 +113,10 @@ export class ArchipelagoSessionRegistry {
     })
   }
 
+  linkChatChannel (sessionId: number, chatChannelId: DC.Snowflake): void {
+    this.#chatChannelToId.set(chatChannelId, sessionId)
+  }
+
   async moveSessionToChannel (sessionId: number, newChannel: DC.TextChannel | DC.ThreadChannel): Promise<boolean> {
     const session = this.#sessions.get(sessionId)
     const oldChannelId = this.#idToChannel.get(sessionId)
@@ -148,5 +157,12 @@ export class ArchipelagoSessionRegistry {
     this.#sessions.delete(sessionId)
     this.#idToChannel.delete(sessionId)
     this.#channelToId.delete(channelIdToRemove)
+    // Clean up any linked chat channel entry
+    for (const [chatChannelId, id] of this.#chatChannelToId) {
+      if (id === sessionId) {
+        this.#chatChannelToId.delete(chatChannelId)
+        break
+      }
+    }
   }
 }
