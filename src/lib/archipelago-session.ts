@@ -109,6 +109,8 @@ export class ArchipelagoSession {
   // Saved credentials for automatic reconnection after unexpected disconnects
   #lastVesselName: string | null = null
   #lastPassword: string | undefined = undefined
+  // Last successfully fetched port — used as fallback when the webhost API is unreachable
+  #lastKnownPort: number | null = null
 
   // Tracks recent goals by slotId to prevent item release spam
   #goalCache = new Set<number>()
@@ -180,18 +182,34 @@ export class ArchipelagoSession {
 
   async #attemptLoginAsPlayer (slotName: string, password?: string, isAutoReconnect = false): Promise<SessionLoginAttemptResult> {
     const sessionStatus = await this.getCurrentStatus()
-    if (!sessionStatus) {
+
+    // Cache the port whenever we get a fresh status, so we can fall back to it
+    // if the webhost API is temporarily unavailable.
+    if (sessionStatus) {
+      this.#lastKnownPort = sessionStatus.port
+    }
+
+    const port = sessionStatus?.port ?? this.#lastKnownPort
+    if (!port) {
       logger.warn(
-        'Failed to get session status when starting archipelago session',
+        'Failed to get session status and no cached port available',
         { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password },
       )
       return SessionLoginAttemptResult.ServerDown
     }
+
+    if (!sessionStatus) {
+      logger.warn(
+        'Webhost API unavailable — attempting connect with last known port',
+        { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, port },
+      )
+    }
+
     if (!this.#staticState.players.map(player => player.slotName).includes(slotName)) {
       return SessionLoginAttemptResult.PlayerNotFound
     }
     try {
-      const url = `${this.#roomData.domain}:${sessionStatus.port}`
+      const url = `${this.#roomData.domain}:${port}`
       await this.#client.login(
         url,
         slotName,
