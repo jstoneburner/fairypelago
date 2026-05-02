@@ -203,6 +203,10 @@ export class ArchipelagoSession {
     // which then fires 1 s later and tears down the connection we just established.
     this.#isLoggingIn = true
     try {
+      // Snapshot the goal cache before fetching fresh status. After login we'll diff
+      // against the new cache to find players who goaled while the bot was offline.
+      const previouslyGoaled = new Set(this.#goalCache)
+
       const sessionStatus = await this.getCurrentStatus()
 
       // Cache the port whenever we get a fresh status, so we can fall back to it
@@ -253,8 +257,14 @@ export class ArchipelagoSession {
         // for item name lookup in the status to work
         await this.getDataPackage()
 
+        // Compute which players goaled while the bot was offline (newly added to
+        // #goalCache by getCurrentStatus() vs. what was already cached before this attempt).
+        const missedGoalNames = [...this.#goalCache]
+          .filter(slotId => !previouslyGoaled.has(slotId))
+          .map(slotId => this.#staticState.players.find(p => p.slotId === slotId)?.slotName ?? `Slot ${slotId}`)
+
         this.#isLoggingIn = false
-        await this.#eventHandler.socketConnected(this, isAutoReconnect)
+        await this.#eventHandler.socketConnected(this, isAutoReconnect, missedGoalNames.length > 0 ? missedGoalNames : undefined)
         return SessionLoginAttemptResult.Success
       } catch (err) {
         if (err instanceof LoginError) {
@@ -535,10 +545,10 @@ export class ArchipelagoSession {
     this.#client.messages.on('itemSent', catchAndLogError(async (text, item) => {
       if (this.#goalCache.has(item.sender.slot) && !item.progression) return
       if (this.#goalCache.has(item.receiver.slot)) return
-      if (item.progression && !this.#isWhitelisted(ArchipelagoMessageType.ItemSentProgression)) return
-      if (item.useful && !item.progression && !this.#isWhitelisted(ArchipelagoMessageType.ItemSentUseful)) return
-      if (item.filler && !this.#isWhitelisted(ArchipelagoMessageType.ItemSentFiller)) return
-      if (item.trap && !this.#isWhitelisted(ArchipelagoMessageType.ItemSentTrap)) return
+      if (item.progression && !await this.#isWhitelisted(ArchipelagoMessageType.ItemSentProgression)) return
+      if (item.useful && !item.progression && !await this.#isWhitelisted(ArchipelagoMessageType.ItemSentUseful)) return
+      if (item.filler && !await this.#isWhitelisted(ArchipelagoMessageType.ItemSentFiller)) return
+      if (item.trap && !await this.#isWhitelisted(ArchipelagoMessageType.ItemSentTrap)) return
       await this.#eventHandler.itemSent(this, text, item)
     }))
 

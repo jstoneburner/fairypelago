@@ -69,11 +69,21 @@ export class EventToDiscordHandler implements IEventHandler {
     }
   }
 
-  async socketConnected (session: ArchipelagoSession, isAutoReconnect: boolean) {
-    // Suppress on silent background reconnects — use `>status` to check connection state.
-    if (isAutoReconnect) return
-    const currentVessel = session.getCurrentVessel()
-    await this.#discordChannel.send(`I've connected to the session through __${currentVessel}__.`)
+  async socketConnected (session: ArchipelagoSession, isAutoReconnect: boolean, missedGoalNames?: string[]) {
+    // Suppress the "I've connected" banner on silent background reconnects.
+    if (!isAutoReconnect) {
+      const currentVessel = session.getCurrentVessel()
+      await this.#discordChannel.send(`I've connected to the session through __${currentVessel}__.`)
+    }
+
+    // Announce any goals that happened while the bot was offline (detected from the
+    // webhost API on reconnect). This fires for both auto-reconnects and user-triggered
+    // connects so the channel stays accurate even if the bot was down mid-session.
+    if (missedGoalNames && missedGoalNames.length > 0) {
+      for (const name of missedGoalNames) {
+        await this.#discordChannel.send(`🏁 **${name}** reached their objective while I was offline!`)
+      }
+    }
   }
 
   async reconnectFailed (session: ArchipelagoSession) {

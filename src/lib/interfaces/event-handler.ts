@@ -10,8 +10,9 @@ export interface IEventHandler {
   sessionFailedAutojoin: (session: ArchipelagoSession, attemptResult: SessionLoginAttemptResult) => Promise<void>;
   /** willReconnect=true means an automatic retry is already scheduled; suppress the message. */
   socketDisconnected: (session: ArchipelagoSession, isFinished: boolean, willReconnect: boolean) => Promise<void>;
-  /** isAutoReconnect=true means this was a silent background reconnect; suppress the message. */
-  socketConnected: (session: ArchipelagoSession, isAutoReconnect: boolean) => Promise<void>;
+  /** isAutoReconnect=true means this was a silent background reconnect; suppress the message.
+   *  missedGoalNames: players who reached their goal while the bot was offline (detected via webhost API on reconnect). */
+  socketConnected: (session: ArchipelagoSession, isAutoReconnect: boolean, missedGoalNames?: string[]) => Promise<void>;
   /** Called when the session exhausts all automatic reconnect attempts. */
   reconnectFailed: (session: ArchipelagoSession) => Promise<void>;
   botShutdown: (session: ArchipelagoSession) => Promise<void>;
