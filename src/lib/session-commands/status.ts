@@ -1,28 +1,31 @@
 import { SessionCommand } from '../../types/session-command.js'
 import { getItemTierIcon } from '../icon-lookup-table.js'
 import { convertToTimestamp } from '../util/discord-formatting.js'
-import { replyWithError, sendNewlineSplitDiscordTextMessage } from '../util/message-utils.js'
+import { sendNewlineSplitDiscordTextMessage } from '../util/message-utils.js'
 
 export const status: SessionCommand = {
   name: 'status',
   description: 'Get the current status of the session',
   async execute (message, _args, session) {
-    const status = await session.getCurrentStatus()
-    if (!status) {
-      await replyWithError(message, 'Unable to get current status. Perhaps the server is down?')
-      return
-    }
-    const replyTokens = []
+    const replyTokens: string[] = []
+
+    // Connection status is always available from the WebSocket — show it first
+    // so the command is useful even when the webhost API is temporarily unavailable.
     if (session.isSocketConnected) {
       const currentVessel = session.getCurrentVessel()
-      if (!currentVessel) {
-        await replyWithError(message, 'Unable to get status, perhaps try again in a bit?')
-        return
-      }
-      replyTokens.push(`${getItemTierIcon('progression')} Connected as ${currentVessel}!`)
+      replyTokens.push(`${getItemTierIcon('progression')} Connected as **${currentVessel}**!`)
     } else {
-      replyTokens.push(`${getItemTierIcon('trap')} Disconnected`)
+      replyTokens.push(`${getItemTierIcon('trap')} Not connected`)
     }
+
+    // Extended per-player info comes from the webhost API — best-effort only.
+    const status = await session.getCurrentStatus()
+    if (!status) {
+      replyTokens.push('-# *(webhost API unavailable — player stats not shown)*')
+      await message.reply(replyTokens.join('\n'))
+      return
+    }
+
     replyTokens.push(`Last Activity: ${convertToTimestamp(status.lastRoomActivity)}`)
     replyTokens.push('')
 
@@ -55,9 +58,9 @@ export const status: SessionCommand = {
       })()
       replyTokens.push(`- ${nameDisplay} ${playerStatus}`)
 
-      const playerChecksDone = status.checksDone[player.slotId].length ?? 0
+      const playerChecksDone = status.checksDone[player.slotId]?.length ?? 0
       const playerTotalChecks = session.staticState.players.find(p => p.slotId === player.slotId)?.game.totalLocations ?? 1
-      const playerItemsReceived = status.itemsReceived[player.slotId].length ?? 0
+      const playerItemsReceived = status.itemsReceived[player.slotId]?.length ?? 0
       const checksPercentage = ((playerChecksDone / playerTotalChecks) * 100).toFixed(2)
       replyTokens.push(`-# Checks: ${playerChecksDone} / ${playerTotalChecks} (${checksPercentage}%)`)
       replyTokens.push(`-# Received: ${playerItemsReceived}`)
