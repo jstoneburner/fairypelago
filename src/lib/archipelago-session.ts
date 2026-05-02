@@ -236,10 +236,13 @@ export class ArchipelagoSession {
       }
       try {
         const url = `${this.#roomData.domain}:${port}`
+        // AP 0.6.x server validates that `game` is non-empty even for Tracker/TextOnly
+        // clients. Pass the actual game name for this slot rather than leaving it blank.
+        const gameName = this.#staticState.players.find(p => p.slotName === slotName)?.game.name ?? ''
         await this.#client.login(
           url,
           slotName,
-          undefined, // game — not needed for TextOnly/Tracker clients
+          gameName,
           { tags: ['Discord', 'Tracker', 'TextOnly'], password },
         )
         logger.info('Started websocket connection to AP server', {
@@ -303,10 +306,11 @@ export class ArchipelagoSession {
     }
     const newClient = new ArchipelagoClient({ autoFetchDataPackage: false })
     try {
+      const gameName = this.#staticState.players.find(p => p.slotName === slotName)?.game.name ?? ''
       await newClient.login(
         `${this.#roomData.domain}:${sessionStatus.port}`,
         slotName,
-        undefined,
+        gameName,
         { tags: ['Discord', 'Tracker', 'TextOnly'] },
       )
       const oldClient = this.#client
