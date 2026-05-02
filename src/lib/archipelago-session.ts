@@ -115,6 +115,16 @@ export class ArchipelagoSession {
   // Tracks recent goals by slotId to prevent item release spam
   #goalCache = new Set<number>()
 
+  // Guards against reconnect loops caused by archipelago.js's socket.connect() always
+  // calling disconnect() first, which emits 'disconnected' and triggers #scheduleReconnect.
+  // Set to true for the entire duration of any login attempt so that 'disconnected' events
+  // fired by connect() itself are ignored.
+  #isLoggingIn = false
+
+  // Incremented whenever a user-initiated start() call begins, so that any previously
+  // queued #scheduleReconnect callbacks know they've been superseded and should exit.
+  #reconnectGeneration = 0
+
   private constructor (
     sessionId: number,
     client: ArchipelagoClient,
@@ -156,6 +166,8 @@ export class ArchipelagoSession {
   // If not, attempt to start under any account if autojoin is enabled,
   // otherwise fire session idle event
   async start (slotName?: string, password?: string) {
+    // Bump the generation so any previously scheduled reconnect callbacks abort.
+    this.#reconnectGeneration++
     if (slotName) {
       return this.#attemptLoginAsPlayer(slotName, password)
     }
@@ -185,68 +197,80 @@ export class ArchipelagoSession {
   }
 
   async #attemptLoginAsPlayer (slotName: string, password?: string, isAutoReconnect = false): Promise<SessionLoginAttemptResult> {
-    const sessionStatus = await this.getCurrentStatus()
-
-    // Cache the port whenever we get a fresh status, so we can fall back to it
-    // if the webhost API is temporarily unavailable.
-    if (sessionStatus) {
-      this.#lastKnownPort = sessionStatus.port
-    }
-
-    const port = sessionStatus?.port ?? this.#lastKnownPort
-    if (!port) {
-      logger.warn(
-        'Failed to get session status and no cached port available',
-        { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password },
-      )
-      return SessionLoginAttemptResult.ServerDown
-    }
-
-    if (!sessionStatus) {
-      logger.warn(
-        'Webhost API unavailable — attempting connect with last known port',
-        { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, port },
-      )
-    }
-
-    if (!this.#staticState.players.map(player => player.slotName).includes(slotName)) {
-      return SessionLoginAttemptResult.PlayerNotFound
-    }
+    // While a login is in progress, the 'disconnected' event handler must be a no-op.
+    // archipelago.js's socket.connect() always calls disconnect() first, which emits
+    // 'disconnected'. Without this guard that emission triggers #scheduleReconnect,
+    // which then fires 1 s later and tears down the connection we just established.
+    this.#isLoggingIn = true
     try {
-      const url = `${this.#roomData.domain}:${port}`
-      await this.#client.login(
-        url,
-        slotName,
-        undefined, // game — not needed for TextOnly/Tracker clients
-        {
-          tags: ['Discord', 'Tracker', 'TextOnly'],
-          password,
-          items: 0, // Minimal items handling — this bot is an observer, not a player
-        },
-      )
-      logger.info('Started websocket connection to AP server', {
-        sessionId: this.#sessionId,
-        vessel: slotName,
-        hasPassword: !!password,
-        url,
-      })
+      const sessionStatus = await this.getCurrentStatus()
 
-      // Save credentials so the reconnect logic can restore the connection
-      this.#lastVesselName = slotName
-      this.#lastPassword = password
-
-      // Populate data package cache with current game packages
-      // for item name lookup in the status to work
-      await this.getDataPackage()
-
-      await this.#eventHandler.socketConnected(this, isAutoReconnect)
-      return SessionLoginAttemptResult.Success
-    } catch (err) {
-      if (err instanceof LoginError) {
-        return SessionLoginAttemptResult.PasswordIncorrect
+      // Cache the port whenever we get a fresh status, so we can fall back to it
+      // if the webhost API is temporarily unavailable.
+      if (sessionStatus) {
+        this.#lastKnownPort = sessionStatus.port
       }
-      logger.warn('Failed to login to archipelago session', { error: err, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password })
-      return SessionLoginAttemptResult.ServerDown
+
+      const port = sessionStatus?.port ?? this.#lastKnownPort
+      if (!port) {
+        logger.warn(
+          'Failed to get session status and no cached port available',
+          { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password },
+        )
+        return SessionLoginAttemptResult.ServerDown
+      }
+
+      if (!sessionStatus) {
+        logger.warn(
+          'Webhost API unavailable — attempting connect with last known port',
+          { roomId: this.#roomData.roomId, sessionId: this.#sessionId, vessel: slotName, port },
+        )
+      }
+
+      if (!this.#staticState.players.map(player => player.slotName).includes(slotName)) {
+        return SessionLoginAttemptResult.PlayerNotFound
+      }
+      try {
+        const url = `${this.#roomData.domain}:${port}`
+        await this.#client.login(
+          url,
+          slotName,
+          undefined, // game — not needed for TextOnly/Tracker clients
+          { tags: ['Discord', 'Tracker', 'TextOnly'], password },
+        )
+        logger.info('Started websocket connection to AP server', {
+          sessionId: this.#sessionId,
+          vessel: slotName,
+          hasPassword: !!password,
+          url,
+        })
+
+        // Save credentials so the reconnect logic can restore the connection
+        this.#lastVesselName = slotName
+        this.#lastPassword = password
+
+        // Populate data package cache with current game packages
+        // for item name lookup in the status to work
+        await this.getDataPackage()
+
+        this.#isLoggingIn = false
+        await this.#eventHandler.socketConnected(this, isAutoReconnect)
+        return SessionLoginAttemptResult.Success
+      } catch (err) {
+        if (err instanceof LoginError) {
+          logger.warn('Login refused by AP server', {
+            sessionId: this.#sessionId,
+            vessel: slotName,
+            hasPassword: !!password,
+            reasons: err.errors,
+          })
+          return SessionLoginAttemptResult.PasswordIncorrect
+        }
+        logger.warn('Failed to login to archipelago session', { error: err, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password })
+        return SessionLoginAttemptResult.ServerDown
+      }
+    } finally {
+      this.#isLoggingIn = false
     }
   }
 
@@ -312,9 +336,11 @@ export class ArchipelagoSession {
     this.#eventHandler.changeDiscordChannel(channel)
   }
 
-  async #scheduleReconnect (attempt: number): Promise<void> {
+  async #scheduleReconnect (attempt: number, generation: number): Promise<void> {
     const MAX_ATTEMPTS = 8
     if (this.#isDisposed || this.#isFinished || !this.#lastVesselName) return
+    // A newer start() call or login attempt has superseded this reconnect chain.
+    if (generation !== this.#reconnectGeneration) return
     if (attempt > MAX_ATTEMPTS) {
       logger.warn('AP reconnect max attempts reached, giving up', { sessionId: this.#sessionId })
       await this.#eventHandler.reconnectFailed(this)
@@ -324,12 +350,13 @@ export class ArchipelagoSession {
     logger.info('Scheduling AP reconnect', { sessionId: this.#sessionId, attempt, delayMs })
     await new Promise<void>(resolve => setTimeout(resolve, delayMs))
     if (this.#isDisposed || this.#isFinished) return
+    if (generation !== this.#reconnectGeneration) return
 
     logger.info('Attempting AP reconnect', { sessionId: this.#sessionId, attempt, vessel: this.#lastVesselName })
     const result = await this.#attemptLoginAsPlayer(this.#lastVesselName, this.#lastPassword, true)
     if (result !== SessionLoginAttemptResult.Success) {
       logger.warn('AP reconnect attempt failed', { sessionId: this.#sessionId, attempt, result })
-      await this.#scheduleReconnect(attempt + 1)
+      await this.#scheduleReconnect(attempt + 1, generation)
     }
   }
 
@@ -462,6 +489,10 @@ export class ArchipelagoSession {
 
   attachListeners () {
     this.#client.socket.on('disconnected', async () => {
+      // Ignore disconnects that are a direct side-effect of our own login calls.
+      // archipelago.js calls socket.disconnect() at the start of every connect(),
+      // which would otherwise trigger a spurious reconnect loop.
+      if (this.#isLoggingIn) return
       if (this.#prevVesselChange.isInTransition) {
         this.#prevVesselChange.isInTransition = false
       } else {
@@ -469,7 +500,10 @@ export class ArchipelagoSession {
         const willReconnect = !this.#isFinished && !this.#isDisposed && !!this.#lastVesselName
         await this.#eventHandler.socketDisconnected(this, this.#isFinished, willReconnect)
         if (willReconnect) {
-          void this.#scheduleReconnect(1)
+          // Capture current generation so this reconnect chain can be cancelled
+          // if start() is called again before it completes.
+          const generation = this.#reconnectGeneration
+          void this.#scheduleReconnect(1, generation)
         }
       }
     })
