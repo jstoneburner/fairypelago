@@ -236,15 +236,26 @@ export class ArchipelagoSession {
       }
       try {
         const url = `${this.#roomData.domain}:${port}`
-        // AP 0.6.x server validates that `game` is non-empty even for Tracker/TextOnly
-        // clients. Pass the actual game name for this slot rather than leaving it blank.
+        // Pass the actual game name for this slot (AP 0.6.x validates this field).
         const gameName = this.#staticState.players.find(p => p.slotName === slotName)?.game.name ?? ''
-        await this.#client.login(
+        // For TextOnly/Tracker clients, items_handling must be 0 (minimal) — the bot
+        // is an observer and does not receive or track items.
+        // Also never pass password: undefined — that overrides the default '' and omits
+        // the field from the JSON packet entirely; use '' when no password is provided.
+        const loginOptions = {
+          tags: ['Discord', 'Tracker', 'TextOnly'] as string[],
+          items: 0,
+          password: password ?? '',
+        }
+        logger.info('Attempting AP login', {
+          sessionId: this.#sessionId,
           url,
-          slotName,
+          vessel: slotName,
           gameName,
-          { tags: ['Discord', 'Tracker', 'TextOnly'], password },
-        )
+          items: loginOptions.items,
+          hasPassword: !!password,
+        })
+        await this.#client.login(url, slotName, gameName, loginOptions)
         logger.info('Started websocket connection to AP server', {
           sessionId: this.#sessionId,
           vessel: slotName,
