@@ -398,11 +398,9 @@ export class ArchipelagoSession {
         const status = await this.#webhostClient.fetchSessionStatus(this.#roomData.roomId)
         if (!status) return null
 
-        // Populate the data packages in cache if there is no cached version and this is called before start()
-        const packages = this.#client.package.exportPackage()
-        if (Object.keys(packages.games).length <= 0) {
-          await this.#client.package.fetchPackage()
-        }
+        // No data-package fetch here: the socket may not be authenticated yet when
+        // getCurrentStatus() is called (it runs before login() to discover the port).
+        // Game packages are fetched in #attemptLoginAsPlayer after a successful login.
 
         const finalStatus = extractToSessionStatus(this.#client, this.#staticState, status)
         this.#dynamicStateCache.set(finalStatus)
@@ -447,15 +445,14 @@ export class ArchipelagoSession {
     }
   }
 
-  // Fetches the data package from memory.
-  // If data package is not yet fetched, will perform expensive fetch calls.
+  // Fetches game data packages (item/location name tables) via the WebSocket.
+  // Delegates directly to archipelago.js which compares server checksums against
+  // what is already cached and only requests what's actually missing — so calling
+  // this after every successful login is safe and efficient.
+  // NOTE: the pre-loaded "Archipelago" package always makes exportPackage() return
+  // a non-empty object, so the old "length <= 0" guard was always skipping the fetch.
   async getDataPackage (games?: string[]) {
-    const packages = this.#client.package.exportPackage()
-    if (Object.keys(packages.games).length <= 0) {
-      return await this.#client.package.fetchPackage(games)
-    } else {
-      return packages
-    }
+    return await this.#client.package.fetchPackage(games)
   }
 
   getCurrentVessel () {
