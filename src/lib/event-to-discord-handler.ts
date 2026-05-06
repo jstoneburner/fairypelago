@@ -88,8 +88,8 @@ export class EventToDiscordHandler implements IEventHandler {
 
   async reconnectFailed (session: ArchipelagoSession) {
     await this.#discordChannel.send(
-      'I lost connection and couldn\'t automatically reconnect. ' +
-      'Give me the `connect` command to try manually.',
+      'It looks like the server might be down. ' +
+      'I\'ll keep trying to reconnect every 5 minutes — no need to do anything.',
     )
   }
 

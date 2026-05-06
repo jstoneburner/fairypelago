@@ -362,16 +362,21 @@ export class ArchipelagoSession {
   }
 
   async #scheduleReconnect (attempt: number, generation: number): Promise<void> {
-    const MAX_ATTEMPTS = 8
     if (this.#isDisposed || this.#isFinished || !this.#lastVesselName) return
     // A newer start() call or login attempt has superseded this reconnect chain.
     if (generation !== this.#reconnectGeneration) return
-    if (attempt > MAX_ATTEMPTS) {
-      logger.warn('AP reconnect max attempts reached, giving up', { sessionId: this.#sessionId })
-      await this.#eventHandler.reconnectFailed(this)
-      return
-    }
+
     const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5 * 60 * 1000)
+
+    // Attempt 9 is the first time the delay is capped at 5 minutes, meaning the
+    // initial exponential backoff window has been exhausted. Notify the channel
+    // once so users know the server appears down, but continue retrying every
+    // 5 minutes indefinitely — no manual intervention required.
+    if (attempt === 9) {
+      logger.warn('AP reconnect backoff capped — server appears down, will keep retrying every 5 minutes', { sessionId: this.#sessionId })
+      await this.#eventHandler.reconnectFailed(this)
+    }
+
     logger.info('Scheduling AP reconnect', { sessionId: this.#sessionId, attempt, delayMs })
     await new Promise<void>(resolve => setTimeout(resolve, delayMs))
     if (this.#isDisposed || this.#isFinished) return
