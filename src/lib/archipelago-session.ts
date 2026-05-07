@@ -121,6 +121,12 @@ export class ArchipelagoSession {
   // fired by connect() itself are ignored.
   #isLoggingIn = false
 
+  // Prevents concurrent start() calls (e.g. startup autojoin racing with a queued >connect
+  // Discord message). Without this, two concurrent #client.login() calls on the same socket
+  // tear each other down. #scheduleReconnect bypasses this by calling #attemptLoginAsPlayer
+  // directly, so reconnects are never blocked.
+  #startInProgress = false
+
   // Incremented whenever a user-initiated start() call begins, so that any previously
   // queued #scheduleReconnect callbacks know they've been superseded and should exit.
   #reconnectGeneration = 0
@@ -166,6 +172,19 @@ export class ArchipelagoSession {
   // If not, attempt to start under any account if autojoin is enabled,
   // otherwise fire session idle event
   async start (slotName?: string, password?: string) {
+    if (this.#startInProgress) {
+      logger.warn('start() called while login already in progress, ignoring', { sessionId: this.#sessionId })
+      return
+    }
+    this.#startInProgress = true
+    try {
+      return await this.#doStart(slotName, password)
+    } finally {
+      this.#startInProgress = false
+    }
+  }
+
+  async #doStart (slotName?: string, password?: string) {
     // Bump the generation so any previously scheduled reconnect callbacks abort.
     this.#reconnectGeneration++
     if (slotName) {
@@ -290,6 +309,9 @@ export class ArchipelagoSession {
           })
           return SessionLoginAttemptResult.PasswordIncorrect
         }
+        // Invalidate the status cache so the next reconnect attempt re-fetches the
+        // port from the webhost API — the server may have restarted on a new port.
+        this.#dynamicStateCache.invalidate()
         logger.warn('Failed to login to archipelago session', { error: err, sessionId: this.#sessionId, vessel: slotName, hasPassword: !!password })
         return SessionLoginAttemptResult.ServerDown
       }
