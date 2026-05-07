@@ -58,8 +58,10 @@ export function populateItemIcons (itemIcons: ItemIcons) {
 export function populateItemTierIcons (itemTierIcons: ItemTierIcons) {
   const output: ItemTierIcons = {}
   for (const [itemName, emojiName] of Object.entries(itemTierIcons)) {
-    const emojiString = nameToEmojiString.get(emojiName) ?? ''
-    output[itemName as keyof ItemTierIcons] = emojiString
+    const emojiString = nameToEmojiString.get(emojiName)
+    if (emojiString !== undefined) {
+      output[itemName as keyof ItemTierIcons] = emojiString
+    }
   }
   itemTierIconsText = output
 }

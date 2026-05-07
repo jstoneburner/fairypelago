@@ -29,6 +29,7 @@ If __autojoin__ is enabled in guild settings, the bot will attempt to connect to
 - 🔢 Archipeladoku
 - <img src="assets/archipelago-icons/Celeste/Celeste64/celeste64.png" alt="Celeste 64" width="19"> Celeste 64
 - <img src="assets/archipelago-icons/Celeste/celeste.png" alt="Celeste (Open World)" width="19" > Celeste (Open World)
+- <img src="assets/archipelago-icons/Factorio/factorio.png" alt="Factorio" width="19"> Factorio / Factorio - Space Age Without Space
 - <img src="assets/archipelago-icons/Hollow Knight/hk.png" alt="Hollow Knight" width="19" > Hollow Knight
 - <img src="assets/archipelago-icons/Kirby Super Star/kss.png" alt="Kirby Super Star" width="19" > Kirby Super Star
 - <img src="assets/archipelago-icons/Link&apos;s Awakening DX/ladx.png" alt="Link's Awakening DX" width="19" > Link's Awakening DX

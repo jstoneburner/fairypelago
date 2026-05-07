@@ -11,9 +11,17 @@ export const factorioIcons: IconMatcher[] = [
   { pattern: [/utility-science-pack/], emoji: 'factorio_science_utility' },
   { pattern: [/space-science-pack/], emoji: 'factorio_science_space' },
 
+  // Space Age science packs
+  { pattern: [/metallurgic-science-pack/], emoji: 'factorio_science_metallurgic' },
+  { pattern: [/electromagnetic-science-pack/], emoji: 'factorio_science_electromagnetic' },
+  { pattern: [/agricultural-science-pack/], emoji: 'factorio_science_agricultural' },
+  { pattern: [/cryogenic-science-pack/], emoji: 'factorio_science_cryogenic' },
+  { pattern: [/promethium-science-pack/], emoji: 'factorio_science_promethium' },
+
   // Rocket / win condition
   { pattern: ['rocket-silo', /rocket-silo/], emoji: 'factorio_rocket_silo' },
   { pattern: [/progressive-rocketry/, 'rocketry', 'explosive-rocketry', 'atomic-bomb'], emoji: 'factorio_rocketry' },
+  { pattern: [/stronger-explosives/, /explosive-capsule/, /explosives/], emoji: 'factorio_explosives' },
 
   // Nuclear
   { pattern: ['nuclear-power', /nuclear/], emoji: 'factorio_nuclear' },
@@ -23,8 +31,9 @@ export const factorioIcons: IconMatcher[] = [
   { pattern: ['laser-turret', /progressive-turret/], emoji: 'factorio_laser_turret' },
   { pattern: ['gun-turret'], emoji: 'factorio_gun_turret' },
 
-  // Combat — laser damage research
+  // Combat — laser research
   { pattern: [/progressive-laser-weapons-damage/, /laser-weapons-damage/], emoji: 'factorio_laser_damage' },
+  { pattern: [/laser-shooting-speed/], emoji: 'factorio_laser_turret' },
 
   // Combat — vehicles
   { pattern: ['spidertron'], emoji: 'factorio_spidertron' },
@@ -50,8 +59,34 @@ export const factorioIcons: IconMatcher[] = [
   // Inserters
   { pattern: [/progressive-inserter/, /inserter/], emoji: 'factorio_inserter' },
 
-  // Oil / processing
+  // Oil / processing — base game fluids and industrial refining
   { pattern: [/progressive-processing/, /oil-processing/, /coal-liquefaction/, /uranium-processing/, /steel-processing/], emoji: 'factorio_oil' },
+
+  // Space Age — Vulcanus (lava, foundry, casting, tungsten, calcite)
+  { pattern: [/lava-processing/], emoji: 'factorio_lava' },
+  { pattern: [/foundry/, /casting/], emoji: 'factorio_foundry' },
+  { pattern: [/tungsten/], emoji: 'factorio_tungsten_ore' },
+  { pattern: [/calcite/], emoji: 'factorio_calcite' },
+
+  // Space Age — Fulgora (holmium, electromagnetic plant, recycling)
+  { pattern: [/holmium/], emoji: 'factorio_holmium_ore' },
+  { pattern: [/electromagnetic-plant/], emoji: 'factorio_electromagnetic_plant' },
+  { pattern: [/recycling/], emoji: 'factorio_recycler' },
+
+  // Space Age — Gleba (biochamber, biolabs, bioflux, agricultural tower, carbon fibre)
+  { pattern: [/biochamber/, /biolabs/, /bioflux/, /agricultural-tower/], emoji: 'factorio_biochamber' },
+  { pattern: [/carbon-fibre/], emoji: 'factorio_carbon_fiber' },
+
+  // Space Age — Aquilo (cryogenic plant, ice platform, fusion)
+  { pattern: [/cryogenic-plant/, /ice-platform/], emoji: 'factorio_cryogenic_plant' },
+  { pattern: [/fusion/], emoji: 'factorio_fusion_reactor' },
+
+  // Space Age — space platform and asteroids
+  { pattern: [/space-platform/], emoji: 'factorio_space_platform' },
+  { pattern: [/asteroid/], emoji: 'factorio_asteroid_collector' },
+
+  // Space Age — elevated rail
+  { pattern: [/elevated-rail/], emoji: 'factorio_elevated_rail' },
 
   // Walls
   { pattern: [/progressive-wall/, 'stone-wall', 'gate'], emoji: 'factorio_wall' },
