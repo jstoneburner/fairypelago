@@ -15,6 +15,8 @@ export interface IEventHandler {
   socketConnected: (session: ArchipelagoSession, isAutoReconnect: boolean, missedGoalNames?: string[]) => Promise<void>;
   /** Called when the session exhausts all automatic reconnect attempts. */
   reconnectFailed: (session: ArchipelagoSession) => Promise<void>;
+  /** Called when a fresh webhost API fetch reveals a different port than the last known one. */
+  portChanged: (session: ArchipelagoSession, oldPort: number, newPort: number) => Promise<void>;
   botShutdown: (session: ArchipelagoSession) => Promise<void>;
   adminCommand: (session: ArchipelagoSession, text: string) => Promise<void>;
   chat: (session: ArchipelagoSession, message: string, player: Player) => Promise<void>;

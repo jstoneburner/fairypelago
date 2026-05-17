@@ -231,6 +231,9 @@ export class ArchipelagoSession {
       // Cache the port whenever we get a fresh status, so we can fall back to it
       // if the webhost API is temporarily unavailable.
       if (sessionStatus) {
+        if (this.#lastKnownPort !== null && this.#lastKnownPort !== sessionStatus.port) {
+          await this.#eventHandler.portChanged(this, this.#lastKnownPort, sessionStatus.port)
+        }
         this.#lastKnownPort = sessionStatus.port
       }
 

@@ -93,6 +93,13 @@ export class EventToDiscordHandler implements IEventHandler {
     )
   }
 
+  async portChanged (session: ArchipelagoSession, oldPort: number, newPort: number) {
+    await this.#discordChannel.send(
+      `⚠️ The server port has changed from **${oldPort}** to **${newPort}**. ` +
+      `New address: \`${session.roomData.domain}:${newPort}\``,
+    )
+  }
+
   async botShutdown (session: ArchipelagoSession) {
     await this.#discordChannel.send('I\'m heading out for the day.')
   }
