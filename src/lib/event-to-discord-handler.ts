@@ -104,6 +104,23 @@ export class EventToDiscordHandler implements IEventHandler {
     const responseMsg = await this.#formatter.chat(message, player)
     if (responseMsg === null) return
     await this.#discordChannel.send(responseMsg)
+
+    if (message.startsWith('!hint ')) {
+      // AP only sends hint packets to involved slots, so the bot won't receive itemHinted
+      // for other players' hints. Fetch and filter to just the hinted item instead.
+      // Short delay to let the server register any newly created hint first.
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const searchTerm = message.slice(6).trim().toLowerCase()
+      const hints = await session.getPlayerHints(player.name)
+      if (!hints || hints.length === 0) return
+      const matching = hints.filter(h => h.item.name.toLowerCase().includes(searchTerm))
+      if (matching.length === 0) return
+      const lines = matching.map(h => {
+        const foundTag = h.found ? ' *(found)*' : ''
+        return `- **${this.#formatter.formatItem(h.item)}** at **${h.item.locationName}** in __${h.item.sender.alias}__'s world${foundTag}`
+      })
+      await this.#discordChannel.send(lines.join('\n'))
+    }
   }
 
   async collected (session: ArchipelagoSession, text: string, player: Player) {
