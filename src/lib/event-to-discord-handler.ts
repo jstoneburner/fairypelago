@@ -5,7 +5,6 @@ import { IEventHandler } from './interfaces/event-handler.js'
 import { EventToDiscordFormatter } from './event-to-discord-formatter.js'
 import { INotificationRequestsRepository, ISessionRepository } from '../db/interfaces.js'
 import { ArchipelagoSession } from './archipelago-session.js'
-import { getItemTierIcon } from './icon-lookup-table.js'
 import { CoalescingChannelWrapper } from './util/coalescing-channel-wrapper.js'
 import { SessionLoginAttemptResult } from '../types/session-types.js'
 
@@ -14,13 +13,6 @@ export interface ArchipelagoEventHandlerDeps {
   discordChannel: DC.TextChannel | DC.ThreadChannel;
   sessionRepo: ISessionRepository;
   notificationRequestsRepo: INotificationRequestsRepository;
-}
-
-function itemFlagToIcon (flags: number): string {
-  if (flags & 0b001) return getItemTierIcon('progression') ?? 'unknown'
-  if (flags & 0b010) return getItemTierIcon('useful') ?? 'unknown'
-  if (flags & 0b100) return getItemTierIcon('trap') ?? 'unknown'
-  return getItemTierIcon('filler') ?? 'unknown'
 }
 
 export class EventToDiscordHandler implements IEventHandler {
@@ -112,19 +104,6 @@ export class EventToDiscordHandler implements IEventHandler {
     const responseMsg = await this.#formatter.chat(message, player)
     if (responseMsg === null) return
     await this.#discordChannel.send(responseMsg)
-
-    // Special hint printing behavior if the message is a hint command
-    if (message.startsWith('!hint')) {
-      const hints = await session.getPlayerHints(player.name)
-      if (!hints) {
-        await this.#discordChannel.send('I couldn\'t seem to get the hints...')
-        return
-      }
-      const reply = hints.map(hint => (
-        `- ${itemFlagToIcon(hint.item.flags)} **${this.#formatter.formatItem(hint.item)}** at **${hint.item.locationName}** in __${hint.item.sender.alias}__'s world`
-      )).join('\n')
-      await this.#discordChannel.send(reply)
-    }
   }
 
   async collected (session: ArchipelagoSession, text: string, player: Player) {
