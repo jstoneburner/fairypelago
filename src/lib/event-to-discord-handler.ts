@@ -21,6 +21,9 @@ export class EventToDiscordHandler implements IEventHandler {
   #discordChannel: CoalescingChannelWrapper<string>
   #sessionRepo: ISessionRepository
   #notificationRequestsRepo: INotificationRequestsRepository
+  // Tracks whether a "server is down" announcement has been sent so we don't
+  // repeat it on every restarted reconnect chain during the same outage.
+  #serverIsDown = false
 
   constructor (sessionId: number, deps: ArchipelagoEventHandlerDeps) {
     this.#sessionId = sessionId
@@ -62,8 +65,13 @@ export class EventToDiscordHandler implements IEventHandler {
   }
 
   async socketConnected (session: ArchipelagoSession, isAutoReconnect: boolean, missedGoalNames?: string[]) {
-    // Suppress the "I've connected" banner on silent background reconnects.
-    if (!isAutoReconnect) {
+    if (this.#serverIsDown) {
+      // Server recovered — always announce this regardless of auto-reconnect flag
+      // so users know the outage is over.
+      this.#serverIsDown = false
+      await this.#discordChannel.send('✅ The server is back up and I\'ve reconnected.')
+    } else if (!isAutoReconnect) {
+      // Normal first-time or manual connect.
       const currentVessel = session.getCurrentVessel()
       await this.#discordChannel.send(`I've connected to the session through __${currentVessel}__.`)
     }
@@ -79,6 +87,8 @@ export class EventToDiscordHandler implements IEventHandler {
   }
 
   async reconnectFailed (session: ArchipelagoSession) {
+    if (this.#serverIsDown) return // Already announced — don't repeat for the same outage.
+    this.#serverIsDown = true
     await this.#discordChannel.send(
       'It looks like the server might be down. ' +
       'I\'ll keep trying to reconnect every 5 minutes — no need to do anything.',
