@@ -26,7 +26,7 @@ export const lmIcons: IconMatcher[] = [
   { pattern: ['Progressive Flower'], emoji: 'lm_flower' },
   { pattern: [/.*Boo.*/], emoji: 'lm_boo' },
   { pattern: [/Boolossus MiniBoo [0-9]+/], emoji: 'lm_boo' },
-  { pattern: ['20 Coins & Bills'], emoji: 'lm_billsandcoins' },
+  { pattern: ['20 Coins & Bills'], emoji: 'lm_coinsandbills' },
   { pattern: [/[0-9]+ Coins/], emoji: 'lm_coins' },
   { pattern: [/[0-9]+ Bills/], emoji: 'lm_bills' },
   { pattern: [/[0-9]+ Gold Bars/], emoji: 'lm_goldbar' },
