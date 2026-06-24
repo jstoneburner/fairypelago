@@ -37,7 +37,16 @@ const sessions: Command = {
         await replyWithError(message, `No session found with ID ${id}.`)
         return
       }
-      await sessionRepo.removeSessionById(id)
+      // If the session is live in the registry, route through removeSession() so
+      // its reconnect loop is disposed — a plain repo delete leaves a zombie
+      // session reconnecting forever against a dead room. removeSession() also
+      // deletes the DB row, but it bails early (without touching the DB) when the
+      // session isn't live, so fall back to a direct repo delete in that case.
+      if (sessionRegistry.getSession(id) !== null) {
+        await sessionRegistry.removeSession(id)
+      } else {
+        await sessionRepo.removeSessionById(id)
+      }
       await message.reply(`Session **#${id}** (channel <#${session.channelId}>, room \`${session.roomData.roomId}\`) has been removed from the database.`)
       return
     }
