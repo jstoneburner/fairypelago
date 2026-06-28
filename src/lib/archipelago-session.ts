@@ -195,6 +195,16 @@ export class ArchipelagoSession {
       const attemptResult = await this.#attemptAutojoin()
       if (attemptResult !== SessionLoginAttemptResult.Success) {
         await this.#eventHandler.sessionFailedAutojoin(this, attemptResult)
+        // A cold-start autojoin that fails because the room is unreachable
+        // (ServerDown) never opens a socket, so the 'disconnected' handler never
+        // fires and no reconnect is ever scheduled — the bot would sit idle
+        // forever (e.g. it restarts during a power outage while the room is
+        // momentarily down). Kick off the reconnect loop so it keeps retrying
+        // until the room comes back. Other failures (PlayerNotFound, etc.) are
+        // not retryable, so only do this for ServerDown.
+        if (attemptResult === SessionLoginAttemptResult.ServerDown) {
+          void this.#scheduleReconnect(1, this.#reconnectGeneration)
+        }
       }
     } else {
       await this.#eventHandler.sessionIdle(this)
@@ -387,7 +397,11 @@ export class ArchipelagoSession {
   }
 
   async #scheduleReconnect (attempt: number, generation: number): Promise<void> {
-    if (this.#isDisposed || this.#isFinished || !this.#lastVesselName) return
+    // Note: no #lastVesselName guard here — a cold-start reconnect (room down at
+    // launch) has no known vessel yet and falls back to autojoin below. Callers
+    // that should only reconnect an established session (the 'disconnected'
+    // handler) gate on #lastVesselName themselves.
+    if (this.#isDisposed || this.#isFinished) return
     // A newer start() call or login attempt has superseded this reconnect chain.
     if (generation !== this.#reconnectGeneration) return
 
@@ -407,8 +421,13 @@ export class ArchipelagoSession {
     if (this.#isDisposed || this.#isFinished) return
     if (generation !== this.#reconnectGeneration) return
 
-    logger.info('Attempting AP reconnect', { sessionId: this.#sessionId, attempt, vessel: this.#lastVesselName })
-    const result = await this.#attemptLoginAsPlayer(this.#lastVesselName, this.#lastPassword, true)
+    const vessel = this.#lastVesselName
+    logger.info('Attempting AP reconnect', { sessionId: this.#sessionId, attempt, vessel: vessel ?? '(autojoin)' })
+    // If we have a known-good vessel, reconnect as it; otherwise this is a
+    // cold-start retry, so re-run autojoin to find a joinable slot.
+    const result = vessel
+      ? await this.#attemptLoginAsPlayer(vessel, this.#lastPassword, true)
+      : await this.#attemptAutojoin()
     if (result !== SessionLoginAttemptResult.Success) {
       logger.warn('AP reconnect attempt failed', { sessionId: this.#sessionId, attempt, result })
       await this.#scheduleReconnect(attempt + 1, generation)
