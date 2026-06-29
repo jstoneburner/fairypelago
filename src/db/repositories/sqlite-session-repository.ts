@@ -93,6 +93,24 @@ export class SqliteSessionRepository implements ISessionRepository {
       .execute()
   }
 
+  async getProgressCheckpoint (sessionId: number): Promise<Record<number, number> | null> {
+    const row = await this.db
+      .selectFrom('sessions')
+      .select('progressCheckpoint')
+      .where('id', '=', sessionId)
+      .executeTakeFirst()
+    // ParseJSONResultsPlugin parses the stored JSON string into an object on read.
+    return row?.progressCheckpoint ?? null
+  }
+
+  async setProgressCheckpoint (sessionId: number, checkpoint: Record<number, number>): Promise<void> {
+    await this.db
+      .updateTable('sessions')
+      .set({ progressCheckpoint: JSON.stringify(checkpoint) })
+      .where('id', '=', sessionId)
+      .execute()
+  }
+
   async getSessions (options: GetSessionsOptions = {}): Promise<DBSession[]> {
     let query = await this.db
       .selectFrom('sessions')

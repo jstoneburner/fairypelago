@@ -3,6 +3,8 @@ import { EmbedBuilder, Snowflake, type MessageCreateOptions } from 'discord.js'
 
 import * as IconLookupTable from './icon-lookup-table.js'
 import { IGuildSettingsRepository } from '../db/interfaces.js'
+import { SessionItemReceived } from '../types/session-types.js'
+import { ItemTier } from '../types/icon-types.js'
 
 function makeTimestamp () {
   return `<t:${Math.floor(Date.now() / 1000)}:T>`
@@ -21,6 +23,16 @@ function formatItemTagList (item: Item) {
 const forwardedMsgRegex = /\[[a-zA-Z0-9_.]+\] :: .*/
 function isForwardedMessage (message: string) {
   return forwardedMsgRegex.test(message)
+}
+
+// Tier icon for a catch-up line. Mirrors formatItemTagList's priority order
+// (progression > useful > filler > trap) but works from a resolved ItemTier[].
+function formatTierIcons (tiers: ItemTier[]) {
+  if (tiers.includes('progression')) return IconLookupTable.getItemTierIcon('progression') ?? 'Progression'
+  if (tiers.includes('useful')) return IconLookupTable.getItemTierIcon('useful') ?? 'Useful'
+  if (tiers.includes('filler')) return IconLookupTable.getItemTierIcon('filler') ?? 'Junk'
+  if (tiers.includes('trap')) return IconLookupTable.getItemTierIcon('trap') ?? 'Trap'
+  return ''
 }
 
 export class EventToDiscordFormatter {
@@ -87,6 +99,18 @@ export class EventToDiscordFormatter {
       }
     })()
     return [header, body].join('\n')
+  }
+
+  // Compact single-line rendering of a missed item send for reconnect catch-up.
+  // Built from resolved tracker data (SessionItemReceived) rather than a live
+  // archipelago.js Item, so it mirrors itemSent's wording without the game header.
+  async caughtUpItem (item: SessionItemReceived, receiverName: string): Promise<string> {
+    const tag = formatTierIcons(item.tiers)
+    const prefix = tag ? `${tag} ` : ''
+    if (item.sender === receiverName) {
+      return `> -# ⏪ ${prefix}${await this.#formatPlayer(item.sender)} found **${item.name}** — ${item.location}`
+    }
+    return `> -# ⏪ ${prefix}${await this.#formatPlayer(item.sender)} sent **${item.name}** to ${await this.#formatPlayer(receiverName)} — ${item.location}`
   }
 
   async itemHinted (content: string, item: Item): Promise<MessageCreateOptions> {
