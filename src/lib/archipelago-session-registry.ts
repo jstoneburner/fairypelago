@@ -110,6 +110,7 @@ export class ArchipelagoSessionRegistry {
     return await ArchipelagoSession.makeSession(sessionId, roomData, {
       eventHandler,
       optionsProvider: this.optionsProvider,
+      sessionRepo: this.sessionRepo,
     })
   }
 

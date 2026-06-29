@@ -6,7 +6,7 @@ import { EventToDiscordFormatter } from './event-to-discord-formatter.js'
 import { INotificationRequestsRepository, ISessionRepository } from '../db/interfaces.js'
 import { ArchipelagoSession } from './archipelago-session.js'
 import { CoalescingChannelWrapper } from './util/coalescing-channel-wrapper.js'
-import { SessionLoginAttemptResult } from '../types/session-types.js'
+import { CatchUpResult, SessionLoginAttemptResult } from '../types/session-types.js'
 
 export interface ArchipelagoEventHandlerDeps {
   formatter: EventToDiscordFormatter;
@@ -83,6 +83,25 @@ export class EventToDiscordHandler implements IEventHandler {
       for (const name of missedGoalNames) {
         await this.#discordChannel.send(`🏁 **${name}** reached their objective while I was offline!`)
       }
+    }
+  }
+
+  async caughtUp (session: ArchipelagoSession, result: CatchUpResult) {
+    if (result.mode === 'replay') {
+      await this.#discordChannel.send('⏪ Catching up on what I missed while I was offline:')
+      for (const { item, receiver } of result.items) {
+        await this.#discordChannel.send(await this.#formatter.caughtUpItem(item, receiver))
+      }
+    } else {
+      const lines = result.byReceiver
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+        .map(r => `• **${r.receiver}** received ${r.count}`)
+      const remaining = result.byReceiver.length - 10
+      if (remaining > 0) lines.push(`• …and ${remaining} more`)
+      await this.#discordChannel.send(
+        `⏪ While I was offline I missed **${result.totalItems}** item send${result.totalItems === 1 ? '' : 's'} — too many to replay individually, so here's the gist:\n${lines.join('\n')}`,
+      )
     }
   }
 

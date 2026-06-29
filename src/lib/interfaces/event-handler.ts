@@ -2,7 +2,7 @@ import { Item, Player } from 'archipelago.js'
 import * as DC from 'discord.js'
 
 import { ArchipelagoSession } from '../archipelago-session.js'
-import { SessionLoginAttemptResult } from '../../types/session-types.js'
+import { CatchUpResult, SessionLoginAttemptResult } from '../../types/session-types.js'
 
 export interface IEventHandler {
   changeDiscordChannel: (channel: DC.TextChannel | DC.ThreadChannel) => void;
@@ -13,6 +13,9 @@ export interface IEventHandler {
   /** isAutoReconnect=true means this was a silent background reconnect; suppress the message.
    *  missedGoalNames: players who reached their goal while the bot was offline (detected via webhost API on reconnect). */
   socketConnected: (session: ArchipelagoSession, isAutoReconnect: boolean, missedGoalNames?: string[]) => Promise<void>;
+  /** Replays or summarizes item sends that were missed while the bot was offline,
+   *  reconstructed by diffing the webhost tracker against the persisted checkpoint. */
+  caughtUp: (session: ArchipelagoSession, result: CatchUpResult) => Promise<void>;
   /** Called when the session exhausts all automatic reconnect attempts. */
   reconnectFailed: (session: ArchipelagoSession) => Promise<void>;
   /** Called when a fresh webhost API fetch reveals a different port than the last known one. */

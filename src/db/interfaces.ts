@@ -25,6 +25,10 @@ export interface ISessionRepository {
   findSessionById(sessionId: number): Promise<DBSession | null>;
   updateChannelId(sessionId: number, channelId: string): Promise<void>;
   setChatChannelId(sessionId: number, chatChannelId: string): Promise<void>;
+  /** Per-receiver count of received items already broadcast, used for reconnect
+   *  catch-up. Returns null when no baseline has been established yet. */
+  getProgressCheckpoint(sessionId: number): Promise<Record<number, number> | null>;
+  setProgressCheckpoint(sessionId: number, checkpoint: Record<number, number>): Promise<void>;
 }
 
 export interface DBGuildSettings {

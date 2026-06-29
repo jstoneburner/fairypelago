@@ -5,10 +5,11 @@ import { catchAndLogError } from './util/general.js'
 import { logger } from './util/logger.js'
 import { IEventHandler } from './interfaces/event-handler.js'
 import { IOptionsProvider } from './interfaces/options-provider.js'
+import { ISessionRepository } from '../db/interfaces.js'
 import { ArchipelagoWebhostClient, WebhostInitialSessionData, WebhostSessionStatus } from './archipelago-webhost-client.js'
 import { ItemTier } from '../types/icon-types.js'
 import { TTLCache } from './util/ttl-cache.js'
-import { SessionStaticState, SessionHintingInfo, SessionItemReceived, SessionStatus, SessionLoginAttemptResult } from '../types/session-types.js'
+import { SessionStaticState, SessionHintingInfo, SessionItemReceived, SessionStatus, SessionLoginAttemptResult, CaughtUpItem } from '../types/session-types.js'
 
 interface SessionVesselChange {
   isInTransition: boolean,
@@ -18,6 +19,7 @@ interface SessionVesselChange {
 export interface SessionDeps {
   eventHandler: IEventHandler;
   optionsProvider: IOptionsProvider;
+  sessionRepo: ISessionRepository;
 }
 
 function extractToStaticState (initialData: WebhostInitialSessionData): SessionStaticState {
@@ -92,6 +94,7 @@ export class ArchipelagoSession {
   #roomData: ArchipelagoRoomData
   #eventHandler: IEventHandler
   #optionsProvider: IOptionsProvider
+  #sessionRepo: ISessionRepository
   #staticState: SessionStaticState
   #isFinished = false
   #isDisposed = false
@@ -114,6 +117,13 @@ export class ArchipelagoSession {
 
   // Tracks recent goals by slotId to prevent item release spam
   #goalCache = new Set<number>()
+
+  // Per-receiver count of received items already accounted for (broadcast or
+  // filtered). Seeded from the persisted checkpoint on connect and incremented
+  // per live itemSent, so a reconnect can diff it against the webhost tracker to
+  // find what was missed while offline. Kept aligned with the tracker's
+  // append-ordered itemsReceived list.
+  #broadcastCounts: Record<number, number> = {}
 
   // Guards against reconnect loops caused by archipelago.js's socket.connect() always
   // calling disconnect() first, which emits 'disconnected' and triggers #scheduleReconnect.
@@ -146,6 +156,7 @@ export class ArchipelagoSession {
     this.#staticState = staticState
     this.#eventHandler = deps.eventHandler
     this.#optionsProvider = deps.optionsProvider
+    this.#sessionRepo = deps.sessionRepo
   }
 
   static async makeSession (
@@ -311,6 +322,10 @@ export class ArchipelagoSession {
 
         this.#isLoggingIn = false
         await this.#eventHandler.socketConnected(this, isAutoReconnect, missedGoalNames.length > 0 ? missedGoalNames : undefined)
+        // Reconcile against the webhost tracker and replay/summarize any item
+        // sends missed while the bot was offline. Runs after socketConnected so
+        // catch-up appears below the "reconnected"/missed-goal messages.
+        await this.#catchUpMissedItems()
         return SessionLoginAttemptResult.Success
       } catch (err) {
         if (err instanceof LoginError) {
@@ -568,6 +583,97 @@ export class ArchipelagoSession {
     }
   }
 
+  // Diff the webhost tracker against the persisted checkpoint to find item sends
+  // that happened while the bot was offline, then replay (small gap) or
+  // summarize (large gap) them and advance the checkpoint.
+  async #catchUpMissedItems () {
+    try {
+      // Re-fetch status with the data package now loaded so item/location names
+      // resolve — the pre-login fetch runs before the package is available.
+      this.#dynamicStateCache.invalidate()
+      const status = await this.getCurrentStatus()
+      if (!status) return
+
+      // Current per-receiver received counts = server truth.
+      const currentCounts: Record<number, number> = {}
+      for (const player of this.#staticState.players) {
+        currentCounts[player.slotId] = (status.itemsReceived[player.slotId] ?? []).length
+      }
+
+      const saved = await this.#sessionRepo.getProgressCheckpoint(this.#sessionId)
+
+      // First connect for this session: establish the baseline, don't replay the
+      // entire pre-existing history into the channel.
+      if (!saved) {
+        this.#broadcastCounts = { ...currentCounts }
+        await this.#persistCheckpoint()
+        return
+      }
+
+      const options = await this.#optionsProvider.getOptionsBySessionId(this.#sessionId)
+      const whitelist = new Set(options.whitelistedMessageTypes)
+      const slotIdByName = new Map(this.#staticState.players.map(p => [p.slotName, p.slotId]))
+
+      const missed: CaughtUpItem[] = []
+      for (const player of this.#staticState.players) {
+        const items = status.itemsReceived[player.slotId] ?? []
+        const from = saved[player.slotId] ?? 0
+        if (items.length <= from) continue
+        // Skip everything for a receiver who has goaled (mirrors the live filter).
+        if (this.#goalCache.has(player.slotId)) continue
+        for (const item of items.slice(from)) {
+          if (!this.#isCaughtUpItemDisplayable(item, whitelist, slotIdByName)) continue
+          missed.push({ item, receiver: player.slotName })
+        }
+      }
+
+      // Advance the checkpoint to current truth regardless of how many we display,
+      // so filtered/skipped items don't resurface on the next reconnect.
+      this.#broadcastCounts = { ...currentCounts }
+      await this.#persistCheckpoint()
+
+      if (missed.length === 0) return
+
+      const CATCH_UP_REPLAY_THRESHOLD = 20
+      if (missed.length <= CATCH_UP_REPLAY_THRESHOLD) {
+        await this.#eventHandler.caughtUp(this, { mode: 'replay', items: missed })
+      } else {
+        const counts = new Map<string, number>()
+        for (const { receiver } of missed) counts.set(receiver, (counts.get(receiver) ?? 0) + 1)
+        const byReceiver = [...counts.entries()].map(([receiver, count]) => ({ receiver, count }))
+        await this.#eventHandler.caughtUp(this, { mode: 'summary', totalItems: missed.length, byReceiver })
+      }
+    } catch (err) {
+      logger.warn('Catch-up reconciliation failed', { sessionId: this.#sessionId, error: err })
+    }
+  }
+
+  // Mirrors the live itemSent filter in attachListeners so catch-up shows exactly
+  // what the live path would have: a goaled sender's non-progression items are
+  // suppressed, and each item tier must be whitelisted.
+  #isCaughtUpItemDisplayable (item: SessionItemReceived, whitelist: Set<ArchipelagoMessageType>, slotIdByName: Map<string, number>): boolean {
+    const { tiers } = item
+    const prog = tiers.includes('progression')
+    const useful = tiers.includes('useful')
+    const filler = tiers.includes('filler')
+    const trap = tiers.includes('trap')
+    const senderSlot = slotIdByName.get(item.sender)
+    if (senderSlot !== undefined && this.#goalCache.has(senderSlot) && !prog) return false
+    if (prog && !whitelist.has(ArchipelagoMessageType.ItemSentProgression)) return false
+    if (useful && !prog && !whitelist.has(ArchipelagoMessageType.ItemSentUseful)) return false
+    if (filler && !whitelist.has(ArchipelagoMessageType.ItemSentFiller)) return false
+    if (trap && !whitelist.has(ArchipelagoMessageType.ItemSentTrap)) return false
+    return true
+  }
+
+  async #persistCheckpoint () {
+    try {
+      await this.#sessionRepo.setProgressCheckpoint(this.#sessionId, this.#broadcastCounts)
+    } catch (err) {
+      logger.warn('Failed to persist catch-up checkpoint', { sessionId: this.#sessionId, error: err })
+    }
+  }
+
   attachListeners () {
     this.#client.socket.on('disconnected', async () => {
       // Ignore disconnects that are a direct side-effect of our own login calls.
@@ -614,6 +720,11 @@ export class ArchipelagoSession {
     }))
 
     this.#client.messages.on('itemSent', catchAndLogError(async (text, item) => {
+      // Account for every received item before any display filtering, so the
+      // persisted catch-up baseline stays aligned with the server's record even
+      // for items we don't post (filtered/goaled). Persisted fire-and-forget.
+      this.#broadcastCounts[item.receiver.slot] = (this.#broadcastCounts[item.receiver.slot] ?? 0) + 1
+      void this.#persistCheckpoint()
       if (this.#goalCache.has(item.sender.slot) && !item.progression) return
       if (this.#goalCache.has(item.receiver.slot)) return
       if (item.progression && !await this.#isWhitelisted(ArchipelagoMessageType.ItemSentProgression)) return
