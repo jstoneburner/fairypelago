@@ -320,6 +320,16 @@ export class ArchipelagoSession {
             hasPassword: !!password,
             reasons: err.errors,
           })
+          // InvalidSlot means the server we reached has no slot by this name —
+          // almost always because the room spun down and its port was recycled to
+          // a different room. Treat it as retryable (ServerDown) and invalidate the
+          // port cache so the next attempt re-fetches the room's real current port
+          // once it comes back up. A genuine auth failure (InvalidPassword) is not
+          // retryable and stays PasswordIncorrect so >connect can prompt for one.
+          if (Array.isArray(err.errors) && err.errors.includes('InvalidSlot')) {
+            this.#dynamicStateCache.invalidate()
+            return SessionLoginAttemptResult.ServerDown
+          }
           return SessionLoginAttemptResult.PasswordIncorrect
         }
         // Invalidate the status cache so the next reconnect attempt re-fetches the
