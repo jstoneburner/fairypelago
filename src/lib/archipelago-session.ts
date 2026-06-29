@@ -118,6 +118,13 @@ export class ArchipelagoSession {
   // Tracks recent goals by slotId to prevent item release spam
   #goalCache = new Set<number>()
 
+  // Whether a goal baseline has been persisted for this session. Seeded from the
+  // DB in makeSession. While false (no baseline yet), the first successful
+  // connect records the currently-goaled players silently instead of announcing
+  // them all as "missed" — without this, every restart re-announces every goal
+  // because #goalCache starts empty in memory.
+  #hasPersistedGoalBaseline = false
+
   // Per-receiver count of received items already accounted for (broadcast or
   // filtered). Seeded from the persisted checkpoint on connect and incremented
   // per live itemSent, so a reconnect can diff it against the webhost tracker to
@@ -176,6 +183,13 @@ export class ArchipelagoSession {
 
     const session = new this(sessionId, client, webhostClient, roomData, staticState, deps)
     session.attachListeners()
+    // Seed the goal baseline from the DB so already-announced goals aren't
+    // re-announced after a restart (the in-memory #goalCache starts empty).
+    const announcedGoals = await deps.sessionRepo.getAnnouncedGoals(sessionId)
+    if (announcedGoals) {
+      for (const slotId of announcedGoals) session.#goalCache.add(slotId)
+      session.#hasPersistedGoalBaseline = true
+    }
     return session
   }
 
@@ -321,7 +335,18 @@ export class ArchipelagoSession {
           .map(slotId => this.#staticState.players.find(p => p.slotId === slotId)?.slotName ?? `Slot ${slotId}`)
 
         this.#isLoggingIn = false
-        await this.#eventHandler.socketConnected(this, isAutoReconnect, missedGoalNames.length > 0 ? missedGoalNames : undefined)
+        // Only announce missed goals once a baseline exists. On the very first
+        // connect (no baseline — new session, or first run after this shipped),
+        // the current goals ARE the baseline, so stay silent to avoid announcing
+        // the entire backlog. Subsequent connects announce only newly-goaled.
+        const goalNamesToAnnounce = this.#hasPersistedGoalBaseline && missedGoalNames.length > 0
+          ? missedGoalNames
+          : undefined
+        await this.#eventHandler.socketConnected(this, isAutoReconnect, goalNamesToAnnounce)
+        // Persist the current goaled set so these are never re-announced after a
+        // restart, and so a baseline now exists for future diffs.
+        this.#hasPersistedGoalBaseline = true
+        await this.#persistAnnouncedGoals()
         // Reconcile against the webhost tracker and replay/summarize any item
         // sends missed while the bot was offline. Runs after socketConnected so
         // catch-up appears below the "reconnected"/missed-goal messages.
@@ -674,6 +699,14 @@ export class ArchipelagoSession {
     }
   }
 
+  async #persistAnnouncedGoals () {
+    try {
+      await this.#sessionRepo.setAnnouncedGoals(this.#sessionId, [...this.#goalCache])
+    } catch (err) {
+      logger.warn('Failed to persist announced goals', { sessionId: this.#sessionId, error: err })
+    }
+  }
+
   attachListeners () {
     this.#client.socket.on('disconnected', async () => {
       // Ignore disconnects that are a direct side-effect of our own login calls.
@@ -768,6 +801,11 @@ export class ArchipelagoSession {
 
     this.#client.messages.on('goaled', catchAndLogError(async (text, player) => {
       this.#goalCache.add(player.slot)
+      // Persist so this live goal is part of the baseline — otherwise a restart
+      // would re-detect it as "missed" and re-announce it. Mark the baseline as
+      // established too, since we now have a persisted goal set.
+      this.#hasPersistedGoalBaseline = true
+      void this.#persistAnnouncedGoals()
 
       if (!await this.#isWhitelisted(ArchipelagoMessageType.Goal)) return
       await this.#eventHandler.goaled(this, text, player)

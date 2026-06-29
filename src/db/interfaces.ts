@@ -29,6 +29,10 @@ export interface ISessionRepository {
    *  catch-up. Returns null when no baseline has been established yet. */
   getProgressCheckpoint(sessionId: number): Promise<Record<number, number> | null>;
   setProgressCheckpoint(sessionId: number, checkpoint: Record<number, number>): Promise<void>;
+  /** Slot ids whose goal has already been announced. Returns null when no goal
+   *  baseline has been established yet. */
+  getAnnouncedGoals(sessionId: number): Promise<number[] | null>;
+  setAnnouncedGoals(sessionId: number, slotIds: number[]): Promise<void>;
 }
 
 export interface DBGuildSettings {

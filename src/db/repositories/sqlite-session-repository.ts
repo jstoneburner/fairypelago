@@ -111,6 +111,23 @@ export class SqliteSessionRepository implements ISessionRepository {
       .execute()
   }
 
+  async getAnnouncedGoals (sessionId: number): Promise<number[] | null> {
+    const row = await this.db
+      .selectFrom('sessions')
+      .select('announcedGoals')
+      .where('id', '=', sessionId)
+      .executeTakeFirst()
+    return row?.announcedGoals ?? null
+  }
+
+  async setAnnouncedGoals (sessionId: number, slotIds: number[]): Promise<void> {
+    await this.db
+      .updateTable('sessions')
+      .set({ announcedGoals: JSON.stringify(slotIds) })
+      .where('id', '=', sessionId)
+      .execute()
+  }
+
   async getSessions (options: GetSessionsOptions = {}): Promise<DBSession[]> {
     let query = await this.db
       .selectFrom('sessions')

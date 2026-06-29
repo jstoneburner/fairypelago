@@ -25,6 +25,9 @@ export interface SessionsTable {
   // reconnect catch-up. Nullable + optional on insert; written as a JSON string,
   // read back as a parsed object via ParseJSONResultsPlugin.
   progressCheckpoint: ColumnType<Record<number, number> | null, string | null | undefined, string | null>;
+  // Player slot ids whose goal has already been announced, so a restart doesn't
+  // re-announce them. Null = no baseline yet (first connect records silently).
+  announcedGoals: ColumnType<number[] | null, string | null | undefined, string | null>;
 }
 
 export interface NotificationRequestsTable {
