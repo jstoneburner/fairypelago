@@ -110,7 +110,7 @@ export class EventToDiscordHandler implements IEventHandler {
     this.#serverIsDown = true
     await this.#discordChannel.send(
       'It looks like the server might be down. ' +
-      'I\'ll keep trying to reconnect every 5 minutes — no need to do anything.',
+      'I\'ll keep trying to reconnect (and wake the room) about once a minute — no need to do anything.',
     )
   }
 

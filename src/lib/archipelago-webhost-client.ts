@@ -129,6 +129,19 @@ export class ArchipelagoWebhostClient {
     this.#baseDomain = baseDomain
   }
 
+  // Loads the room page to nudge the webhost into spinning a dormant room's
+  // server back up. The status/tracker API endpoints do NOT wake a room — only
+  // loading the room page does. Used by the reconnect loop so the bot can revive
+  // a room that idled out instead of waiting for a human to open it.
+  async wakeRoom (roomId: string): Promise<void> {
+    const url = `https://${this.#baseDomain}/room/${roomId}`
+    try {
+      await axios.get(url, { timeout: 10000 })
+    } catch (err) {
+      logger.warn('Failed to wake room via webhost', { roomId, error: err })
+    }
+  }
+
   async #getRawRoomStatus (roomId: string) {
     const url = `https://${this.#baseDomain}/api/room_status/${roomId}`
     try {
